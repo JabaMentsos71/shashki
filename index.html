@@ -478,6 +478,16 @@
   }
   .face .badge svg { width: 18px; height: 18px; }
   .tile.turn .face { box-shadow: 0 0 0 4px #5fd46b, 0 0 22px rgba(95, 212, 107, 0.75); transform: translateY(-2px); }
+  /* Время на ход: зелёная рамка убывает по кругу, в последние 5 секунд краснеет */
+  .tile.timed .face { box-shadow: 0 0 20px rgba(95, 212, 107, 0.6); }
+  .tile.timed .face::before {
+    content: ""; position: absolute; inset: -9px; border-radius: 23px; padding: 5px; pointer-events: none;
+    background: conic-gradient(#5fd46b calc(var(--left, 1) * 360deg), rgba(255, 255, 255, 0.16) 0);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  }
+  .tile.timed.hurry .face { box-shadow: 0 0 20px rgba(255, 90, 78, 0.7); }
+  .tile.timed.hurry .face::before { background: conic-gradient(#ff5a4e calc(var(--left, 1) * 360deg), rgba(255, 255, 255, 0.16) 0); }
   .tile.won .face { box-shadow: 0 0 0 4px #ffd35a, 0 0 24px rgba(255, 211, 90, 0.8); }
   .tile.out .face { filter: grayscale(1); opacity: 0.5; }
   .tile .sub { font-size: 0.75rem; font-weight: 700; color: var(--felt-ink); text-align: center; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
@@ -767,7 +777,7 @@
     <div class="me-side">
       <p class="status" id="status" aria-live="polite"></p>
       <div class="controls">
-        <button class="btn" id="btn-undo" type="button">Отменить ход</button>
+        <button class="btn" id="btn-undo" type="button">Отменить ход · 100</button>
         <button class="btn" id="btn-rotate" type="button" aria-pressed="true">Поворачивать доску</button>
         <button class="btn warn" id="btn-resign" type="button">Сдаться</button>
       </div>
@@ -953,6 +963,9 @@
       <label class="toggle"><input type="checkbox" id="set-hints"> Показывать, куда можно сходить и кого взять</label>
       <label class="toggle"><input type="checkbox" id="set-fast"> Компьютер ходит быстро</label>
       <label class="toggle"><input type="checkbox" id="set-anim"> Анимации</label>
+      <label class="toggle"><input type="checkbox" id="set-timer"> Время на ход: 15 секунд (быстрая игра — 10), не успел — ход пропущен</label>
+      <label class="toggle"><input type="checkbox" id="set-sound"> Звуки</label>
+      <label class="toggle"><input type="checkbox" id="set-music"> Спокойная музыка</label>
     </div>
     <div class="row"><button class="btn primary" type="button" data-close>Готово</button></div>
   </div>
@@ -962,13 +975,16 @@
   <div class="sheet-box" role="dialog" aria-modal="true" aria-labelledby="rules-title">
     <h2 id="rules-title">Как играть в шашки втроём</h2>
     <ul>
-      <li>Доска — шестиугольник из трёх половин 8×4. Играют на тёмных клетках. У каждого 12 шашек на трёх первых рядах своей половины.</li>
+      <li>Доска — шестиугольник из трёх половин 8×4 (большая — 10×5). Играют на тёмных клетках. У каждого 12 шашек (на большой — 20) на всех рядах своей половины, кроме ближнего к центру.</li>
       <li>Ходят по кругу: белые, серые, чёрные.</li>
-      <li>Простая шашка ходит на одну клетку вперёд по диагонали. Дойдя до края своей половины, диагональ продолжается у соседа: вертикали a–d ведут к игроку слева, e–h — к игроку справа. Через самый центр доски хода нет.</li>
+      <li>Простая шашка ходит на одну клетку вперёд по диагонали. Дойдя до края своей половины, диагональ продолжается у соседа: левая половина вертикалей ведёт к игроку слева, правая — к игроку справа. Через самый центр доски хода нет.</li>
       <li>Бить обязательно. Шашка бьёт, перепрыгивая через чужую шашку на свободную клетку за ней, — вперёд и назад. Если после взятия можно бить дальше, бьёт дальше той же шашкой. Бить можно шашки обоих соперников.</li>
       <li>Шашка, дошедшая до первой линии соперника, становится дамкой. Дамка ходит и бьёт по диагонали на любое расстояние. Если шашка стала дамкой во время взятия, она бьёт дальше уже как дамка.</li>
       <li>У кого не осталось шашек или некуда ходить — выбывает, его шашки снимаются с доски.</li>
       <li>Побеждает последний оставшийся. Тридцать кругов одними дамками без взятий — ничья.</li>
+      <li>Вдвоём третья половина пустая: по ней можно ходить, а на её краю шашка тоже становится дамкой.</li>
+      <li>На ход — 15 секунд (в быстрой игре — 10). Не успели — ход пропускается. Зелёная рамка вокруг аватарки показывает, сколько осталось.</li>
+      <li>Отменить ход (в игре с компьютером или на одном телефоне) стоит 100 монет.</li>
     </ul>
     <div class="row"><button class="btn primary" type="button" data-close>Понятно</button></div>
   </div>
@@ -1041,9 +1057,9 @@
     });
 
     const fwdOf = (i, c) => (S(i) === c ? 1 : -1);
-    // Дамкой шашка становится на первой линии соперника (вдвоём пустая половина дамку не даёт —
-    // иначе через неё, где никто не мешает, дамкой становились бы за несколько ходов)
-    const crownSq = (i, c) => S(i) !== c && R(i) === 0 && SEATS.includes(S(i));
+    // Дамкой шашка становится на первой линии любой чужой половины — и пустой тоже (вдвоём):
+    // иначе дошедшая до края пустой половины шашка застревала бы навсегда — дальше ходов нет
+    const crownSq = (i, c) => S(i) !== c && R(i) === 0;
 
     // Все цепочки взятий для шашки на from. Взятые шашки остаются на доске до конца хода:
     // их нельзя бить второй раз и через них нельзя прыгать («турецкий удар» запрещён)
@@ -1163,6 +1179,18 @@
       return st;
     }
 
+    // Не успел сходить за отведённое время — ход переходит дальше
+    function pass(st0) {
+      const st = clone(st0);
+      const c = st.turn;
+      st.ply++;
+      st.quiet++;
+      st.last = null;
+      st.log.push({ c, pass: true });
+      advance(st, c);
+      return st;
+    }
+
     function resign(st0) {
       const st = clone(st0);
       const c = st.turn;
@@ -1218,7 +1246,7 @@
       return best;
     }
 
-    return { NAMES, cfg, W, H, N, idx, S, F, R, isDark, step, newGame, legalMoves, play, resign, botMove, cellName, piecesOf };
+    return { NAMES, cfg, W, H, N, idx, S, F, R, isDark, step, newGame, legalMoves, play, pass, resign, botMove, cellName, piecesOf };
   }
 
   // Готовый набор правил по умолчанию (маленькая доска, трое) + конструктор для других настроек
@@ -1495,12 +1523,18 @@
     return tile;
   }
   function localSeat(c) {
+    // На своей (нижней) табличке переключателя нет — чтобы случайно не отдать свой цвет компьютеру
+    if (c === view) return document.createElement('span');
     const seat = document.createElement('button');
     seat.type = 'button';
     seat.className = 'seat';
     seat.textContent = seats[c] === 'bot' ? '→ человек' : '→ компьютер';
     seat.title = seats[c] === 'bot' ? 'Отдать этот цвет человеку' : 'Отдать этот цвет компьютеру';
     seat.addEventListener('click', () => {
+      if (seats[c] !== 'bot' && seats.filter((s, i) => s === 'human' && i !== c && (Ch.cfg.players !== 2 || i !== 2)).length === 0) {
+        toast('Кто-то должен играть сам');
+        return;
+      }
       seats[c] = seats[c] === 'bot' ? 'human' : 'bot';
       save();
       refresh();
@@ -1558,6 +1592,7 @@
   // Клетка для текста: на своей половине — просто «e4», на чужой — «e4 у серых»
   const where = (i, c) => Ch.cellName(i) + (Ch.S(i) !== c ? ' у ' + GEN[Ch.S(i)] : '');
   function moveText(e) {
+    if (e.pass) return 'не успели — ход пропущен';
     return `${e.k ? 'дамка' : 'шашка'} ${where(e.from, e.c)} → ${where(e.to, e.c)}${e.n ? ', взято ' + e.n : ''}${e.crown ? ', стала дамкой!' : ''}`;
   }
   function describe(e) {
@@ -1633,6 +1668,7 @@
     }
     const e = game.log[game.log.length - 1];
     if (!news.length && e && e.crown && game.log.length > prev.log.length) toast(`${NAMES[e.c]}: шашка стала дамкой!`);
+    if (!news.length && e && e.pass && game.log.length > prev.log.length) toast(`${NAMES[e.c]}: время вышло — ход пропущен`);
   }
 
   function doMove(m) {
@@ -1642,12 +1678,33 @@
     game = Ch.play(prev, m);
     selected = -1;
     hop(m.from, m.path || [m.to]);
+    moveSound(m.caps.length, m.crown);
+    botFeelings(prev, m);
     sync();
     announce(prev);
     if (mode === 'online') pushGame();
     else save();
     refresh();
     afterMove();
+  }
+
+  function moveSound(caps, crown) {
+    SFX.fx(caps ? 'capture' : 'move', caps);
+    if (crown) setTimeout(() => SFX.fx('crown'), caps ? 350 : 150);
+  }
+  // Компьютеры тоже кидают смайлики: радуются удачному взятию и злятся, когда их бьют
+  function botFeelings(prev, m) {
+    const mover = prev.turn;
+    const say = (seat, list, chance) => {
+      if (Math.random() > chance) return;
+      const e = list[Math.floor(Math.random() * list.length)];
+      setTimeout(() => sendReaction(seat, e), 500 + Math.random() * 700);
+    };
+    if (mode === 'online' && room.host !== myId) return; // за компьютеров по сети отвечает хозяин стола
+    if (kind(mover) === 'bot' && (m.caps.length >= 2 || m.crown)) say(mover, ['😎', '🔥', '😂'], 0.6);
+    else if (kind(mover) === 'bot' && m.caps.length) say(mover, ['😎', '👏', '😂'], 0.25);
+    const hurt = new Set(m.caps.map((i) => prev.board[i] && prev.board[i].c));
+    for (const c of hurt) if (c !== undefined && c !== null && kind(c) === 'bot') say(c, ['😡', '😭', '😮', '🤔'], m.caps.length >= 2 ? 0.7 : 0.35);
   }
 
   function afterMove() {
@@ -1657,6 +1714,66 @@
     }
     setTimeout(() => { aimView(true); maybeBot(); }, 320);
   }
+
+  // ---------- время на ход ----------
+  let turnKey = '', turnStart = Date.now(), lastTick = -1;
+  const timerOn = () => (mode === 'online' ? !!(room && room.started) : settings.timer !== false);
+  const turnSec = () => (mode === 'online' ? (room && room.turnSec) || 15 : settings.fast ? 10 : 15);
+  function soloHuman() { return mode === 'online' || seats.filter((s) => s === 'human').length === 1; }
+  // Кто по сети пропускает ход за пропавшего игрока: первый другой человек за столом
+  function iAmReferee() {
+    const ref = room.seats.find((id, i) => id && !room.bots[i] && i !== game.turn);
+    return ref === myId;
+  }
+  function paintTimer(left) {
+    for (const el of document.querySelectorAll('.tile.timed')) el.classList.remove('timed', 'hurry');
+    if (left === null) return;
+    for (const tile of document.querySelectorAll(`.tile[data-seat="${game.turn}"]`)) {
+      tile.classList.add('timed');
+      tile.classList.toggle('hurry', left <= 5);
+      tile.querySelector('.face').style.setProperty('--left', String(Math.max(0, Math.min(1, left / turnSec()))));
+      const sub = tile.querySelector('.sub');
+      if (sub) sub.textContent = `Ходит · ${Math.max(0, Math.ceil(left))} с`;
+    }
+  }
+  function timeoutPass() {
+    if (busy || pushing || over()) return;
+    clearTimeout(botTimer);
+    const prev = game;
+    history.push(prev);
+    game = Ch.pass(prev);
+    selected = -1;
+    sync();
+    SFX.fx('timeout');
+    announce(prev);
+    if (mode === 'online') pushGame(); else save();
+    refresh();
+    afterMove();
+  }
+  setInterval(() => {
+    const key = [mode, room ? room.code : '', game.ply, game.turn, game.log.length, game.winner].join('|');
+    if (key !== turnKey) {
+      turnKey = key;
+      turnStart = Date.now();
+      lastTick = -1;
+      if (!over() && kind(game.turn) === 'human' && soloHuman() && game.log.length) setTimeout(() => SFX.fx('myTurn'), 380);
+    }
+    const k = kind(game.turn);
+    const shown = !over() && timerOn() && (k === 'human' || k === 'remote') && $('menu').hidden && $('device').hidden && $('create').hidden;
+    const paused = mode !== 'online' && ([...document.querySelectorAll('.sheet')].some((s) => !s.hidden) || busy);
+    if (!shown || paused) {
+      if (mode !== 'online') turnStart += 250; // на одном телефоне время стоит, пока открыто меню или окно
+      paintTimer(null);
+      return;
+    }
+    const left = turnSec() - (Date.now() - turnStart) / 1000;
+    paintTimer(left);
+    if (k === 'human') {
+      const s = Math.ceil(left);
+      if (left <= 5 && left > 0 && s !== lastTick) { lastTick = s; SFX.fx('tick'); }
+      if (left <= 0) timeoutPass();
+    } else if (k === 'remote' && left <= -4 && iAmReferee()) timeoutPass();
+  }, 250);
 
   function maybeBot() {
     clearTimeout(botTimer);
@@ -1683,11 +1800,15 @@
     }
     const p = game.board[i];
     selected = p && p.c === game.turn && legal.some((m) => m.from === i) ? (selected === i ? -1 : i) : -1;
+    if (selected >= 0) SFX.fx('select');
     drawMarks();
     renderStatus();
   }
 
   function showOver() {
+    const mine = mode === 'online' ? room.seats.indexOf(myId) : -1;
+    const iWon = game.winner >= 0 && (mode === 'online' ? game.winner === mine : seats[game.winner] === 'human');
+    SFX.fx(game.draw ? 'myTurn' : iWon ? 'win' : 'lose');
     $('over-title').textContent = game.winner >= 0 ? `Победили ${NAMES[game.winner].toLowerCase()}!` : 'Ничья';
     const ol = $('over-places');
     ol.textContent = '';
@@ -1782,8 +1903,17 @@
     aimView(true);
     refresh();
   });
-  $('btn-undo').addEventListener('click', () => {
+  const UNDO_PRICE = 100;
+  $('btn-undo').addEventListener('click', async () => {
     if (!history.length) return;
+    if (coins === null) {
+      toast(window.C3Social ? `Отмена хода стоит ${UNDO_PRICE} монет — войдите через Google в меню` : `Отмена хода стоит ${UNDO_PRICE} монет — нужен вход в аккаунт`);
+      return;
+    }
+    if (coins < UNDO_PRICE) { toast(`Не хватает монет: отмена хода стоит ${UNDO_PRICE}`); return; }
+    try { await changeCoins(-UNDO_PRICE); } catch (e) { toast('Не получилось списать монеты — проверьте интернет'); return; }
+    SFX.fx('coin');
+    toast(`Ход отменён · −${UNDO_PRICE} монет`);
     clearTimeout(botTimer);
     busy = false;
     // Откатываем до хода человека (ходы компьютеров после него — тоже)
@@ -1877,7 +2007,7 @@
 
   // ---------- настройки игры (запоминаются на этом телефоне) ----------
   const SET_KEY = 'checkers3-settings';
-  const settings = { hints: true, fast: false, anim: true };
+  const settings = { hints: true, fast: false, anim: true, timer: true, sound: true, music: true };
   try { Object.assign(settings, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { /* по умолчанию */ }
   function applySettings() {
     document.documentElement.classList.toggle('no-anim', !settings.anim);
@@ -1885,6 +2015,9 @@
     $('set-hints').checked = settings.hints;
     $('set-fast').checked = settings.fast;
     $('set-anim').checked = settings.anim;
+    $('set-timer').checked = settings.timer;
+    $('set-sound').checked = settings.sound;
+    $('set-music').checked = settings.music;
   }
   function saveSettings() {
     try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch (e) { /* без запоминания */ }
@@ -1893,6 +2026,106 @@
   $('set-hints').addEventListener('change', (e) => { settings.hints = e.target.checked; saveSettings(); drawMarks(); });
   $('set-fast').addEventListener('change', (e) => { settings.fast = e.target.checked; saveSettings(); });
   $('set-anim').addEventListener('change', (e) => { settings.anim = e.target.checked; saveSettings(); applySettings(); });
+  $('set-timer').addEventListener('change', (e) => { settings.timer = e.target.checked; saveSettings(); turnStart = Date.now(); });
+  $('set-sound').addEventListener('change', (e) => { settings.sound = e.target.checked; saveSettings(); SFX.fx('click'); });
+  $('set-music').addEventListener('change', (e) => { settings.music = e.target.checked; saveSettings(); if (settings.music) SFX.startMusic(); else SFX.stopMusic(); });
+
+  // ---------- звуки и музыка: всё рисуется синтезатором браузера, без файлов ----------
+  const SFX = (() => {
+    let ac = null, master = null, musicGain = null, musicTimer = 0, musicOn = false, noiseBuf = null, step = 0;
+    function ctx() {
+      if (!ac) {
+        const A = window.AudioContext || window.webkitAudioContext;
+        if (!A) return null;
+        ac = new A();
+        master = ac.createGain();
+        master.gain.value = typeof settings.volume === 'number' ? settings.volume : 0.8;
+        master.connect(ac.destination);
+      }
+      if (ac.state === 'suspended') ac.resume().catch(() => {});
+      return ac;
+    }
+    function tone(freq, t0, dur, type, vol, dest) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(freq, t0);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(dest || master);
+      o.start(t0); o.stop(t0 + dur + 0.05);
+    }
+    function noise(t0, dur, f, q, vol) {
+      if (!noiseBuf) {
+        noiseBuf = ac.createBuffer(1, ac.sampleRate * 0.5, ac.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      const s = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain();
+      s.buffer = noiseBuf; bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = q;
+      g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      s.connect(bp); bp.connect(g); g.connect(master);
+      s.start(t0); s.stop(t0 + dur + 0.02);
+    }
+    const SOUNDS = {
+      click(t) { noise(t, 0.035, 2600, 2, 0.12); },
+      select(t) { tone(660, t, 0.09, 'triangle', 0.07); },
+      move(t) { noise(t, 0.07, 1300, 3, 0.5); tone(190, t, 0.1, 'sine', 0.22); },
+      capture(t, n) {
+        noise(t, 0.28, 650, 0.7, 0.22);
+        for (let k = 0; k < Math.max(1, n || 1); k++) { noise(t + 0.06 + k * 0.14, 0.09, 950, 3, 0.75); tone(130, t + 0.06 + k * 0.14, 0.13, 'square', 0.07); }
+      },
+      crown(t) { [1047, 1319, 1568, 2093].forEach((f, k) => tone(f, t + k * 0.09, 0.55, 'triangle', 0.11)); },
+      myTurn(t) { tone(784, t, 0.16, 'sine', 0.09); tone(1175, t + 0.1, 0.24, 'sine', 0.09); },
+      tick(t) { tone(1650, t, 0.05, 'square', 0.045); },
+      timeout(t) { tone(220, t, 0.26, 'sawtooth', 0.07); tone(160, t + 0.12, 0.32, 'sawtooth', 0.07); },
+      win(t) { [523, 659, 784, 1047, 784, 1047].forEach((f, k) => tone(f, t + k * 0.12, 0.38, 'triangle', 0.13)); },
+      lose(t) { [523, 466, 415, 349].forEach((f, k) => tone(f, t + k * 0.18, 0.42, 'sine', 0.11)); },
+      pop(t) { tone(520, t, 0.1, 'sine', 0.11); tone(940, t + 0.03, 0.09, 'sine', 0.08); },
+      coin(t) { tone(1319, t, 0.08, 'square', 0.05); tone(1760, t + 0.07, 0.22, 'square', 0.05); },
+    };
+    // Музыка: тихие аккорды и редкие ноты пентатоники с эхом — спокойно, не мешает думать
+    const SCALE = [0, 2, 4, 7, 9];
+    const CHORDS = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62]];
+    const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+    function pad(f, t0, d) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0); g.gain.linearRampToValueAtTime(0.045, t0 + 1.2); g.gain.linearRampToValueAtTime(0.0001, t0 + d);
+      o.connect(g); g.connect(musicGain); o.start(t0); o.stop(t0 + d + 0.1);
+    }
+    function bar() {
+      if (!musicOn || !ctx()) return;
+      const t0 = ac.currentTime + 0.05;
+      if (step % 4 === 0) for (const m of CHORDS[(step / 4) % CHORDS.length]) pad(hz(m - 12), t0, 4.3);
+      for (let k = 0; k < 2; k++) {
+        if (Math.random() < 0.65) tone(hz(69 + SCALE[Math.floor(Math.random() * 5)] + (Math.random() < 0.3 ? 12 : 0)), t0 + k * 0.5, 1.3, 'triangle', 0.03, musicGain);
+      }
+      step++;
+    }
+    function startMusic() {
+      if (musicOn || !settings.music || !ctx()) return;
+      if (!musicGain) {
+        musicGain = ac.createGain(); musicGain.gain.value = 0.6;
+        const dl = ac.createDelay(), fb = ac.createGain();
+        dl.delayTime.value = 0.33; fb.gain.value = 0.3;
+        musicGain.connect(master); musicGain.connect(dl); dl.connect(fb); fb.connect(dl); dl.connect(master);
+      }
+      musicOn = true; step = 0; bar();
+      musicTimer = setInterval(bar, 1000);
+    }
+    function stopMusic() { musicOn = false; clearInterval(musicTimer); }
+    function fx(name, arg) {
+      if (settings.sound === false || !ctx()) return;
+      try { SOUNDS[name](ac.currentTime + 0.01, arg); } catch (e) { /* без звука */ }
+    }
+    return { fx, startMusic, stopMusic };
+  })();
+  // Браузер разрешает звук только после первого касания
+  let touched = false;
+  document.addEventListener('pointerdown', () => { if (!touched) { touched = true; SFX.startMusic(); } }, true);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) SFX.stopMusic(); else if (touched) SFX.startMusic(); });
+  document.addEventListener('click', (e) => { if (e.target.closest('.btn, .menu-btn, .seat, .choice, .device-btn, .theme-card, .seg button, .mode-card button')) SFX.fx('click'); }, true);
   $('btn-theme').addEventListener('click', applySettings);
 
   // ---------- главное меню ----------
@@ -2134,16 +2367,24 @@
       chan = await r.join('checkers3-' + code.toLowerCase());
       chan.on('react', (msg) => {
         const e = msg.data && msg.data.e;
-        if (REACTS.includes(e)) showReaction(msg.by, e);
+        const seat = msg.data && typeof msg.data.seat === 'number' ? msg.data.seat : room.seats.indexOf(msg.by);
+        if (REACTS.includes(e)) showReaction(seat, e);
       });
     } catch (e) {
       chan = null;
     }
     renderReacts();
   }
+  // Смайлик от места seat: по сети — всем за столом, на одном телефоне — просто показать
+  function sendReaction(seat, e) {
+    if (mode === 'online') {
+      if (chan) chan.emit('react', { e, seat }).catch(() => toast('Реакция не отправилась'));
+      else showReaction(seat, e);
+    } else showReaction(seat, e);
+  }
   function renderReacts() {
     const box = $('reacts');
-    box.hidden = !(mode === 'online' && chan);
+    box.hidden = mode === 'online' && !chan;
     if (box.hidden || box.childElementCount) return;
     for (const e of REACTS) {
       const b = document.createElement('button');
@@ -2151,14 +2392,15 @@
       b.textContent = e;
       b.setAttribute('aria-label', 'Реакция ' + e);
       b.addEventListener('click', () => {
-        if (chan) chan.emit('react', { e }).catch(() => toast('Реакция не отправилась'));
+        const mine = mode === 'online' ? room.seats.indexOf(myId) : view;
+        sendReaction(mine >= 0 ? mine : view, e);
       });
       box.appendChild(b);
     }
   }
   // Смайлик всплывает над табличкой того, кто его отправил
-  function showReaction(by, e) {
-    const seat = room ? room.seats.indexOf(by) : -1;
+  function showReaction(seat, e) {
+    SFX.fx('pop');
     const anchor = document.querySelector(`.tile[data-seat="${seat}"] .face`) || $('status');
     const r = anchor.getBoundingClientRect();
     const s = document.createElement('span');
@@ -2217,7 +2459,7 @@
       const seatsNow = [null, null, null];
       seatsNow[color] = myId;
       await roomRef(code).set({ game: plain(rules.newGame()), seats: seatsNow, bots: [false, false, false], host: myId, rev: 1, created: Date.now(),
-        stake: stakePick, round: 1, stakes: {}, settled: {}, refunds: {}, started: false });
+        stake: stakePick, round: 1, stakes: {}, settled: {}, refunds: {}, started: false, turnSec: settings.fast ? 10 : 15 });
       enterRoom(code);
     } catch (e) {
       fail(e && e.code === 'invalid_argument'
@@ -2266,7 +2508,7 @@
       room = {
         code, seats: d.seats.slice(), bots: d.bots.slice(), host: d.host, rev: d.rev,
         stake: Number(d.stake) || 0, round: Number(d.round) || 1, stakes: d.stakes || {}, settled: d.settled || {}, refunds: d.refunds || {},
-        started: d.started !== false, players: (d.game && d.game.cfg && d.game.cfg.players) || 3,
+        started: d.started !== false, turnSec: Number(d.turnSec) || 15, players: (d.game && d.game.cfg && d.game.cfg.players) || 3,
       };
       // Пришли по приглашению или паролю — садимся на первое свободное место
       if (autoSit && !room.started && room.seats.indexOf(myId) < 0) {
@@ -2301,6 +2543,8 @@
     document.documentElement.style.setProperty('--dur', '0.3s');
     if (g.log.length === prev.log.length + 1 && g.last) {
       hop(g.last.from, g.last.path || [g.last.to]);
+      const e = g.log[g.log.length - 1];
+      moveSound((g.last.caps || []).length, e && e.crown);
     }
     sync();
     if (g.log.length >= prev.log.length && g.out.length >= prev.out.length) announce(prev);
@@ -2487,6 +2731,7 @@
     placeAll();
     applySettings();
     refresh();
+    renderReacts();
     // При входе — сначала «с телефона или с компьютера», потом главное меню
     setDevice(guessDevice());
     showMenu();
