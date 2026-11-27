@@ -11,10 +11,371 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
-<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}
-/* В приложении игры по сети нет — она работает только на claude.ai */
-#m-online,#create [data-opt="mode"] [data-val="online"],#create-online,#btn-online,[data-goto="online"]{display:none!important}</style>
-<script>try{const k='checkers3-create',d=JSON.parse(localStorage.getItem(k)||'null');if(d&&d.mode==='online'){d.mode='bots';localStorage.setItem(k,JSON.stringify(d));}}catch(e){}</script>
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}</style>
+<script>
+// Приложение на телефоне: вход через Google, ID игрока, друзья, приглашения в игру.
+// Хранилище — Firebase (проект shashki-troih). Здесь же «переходник»: страница игры написана под хранилище claude.ai
+// (window.claude.use('db' | 'user' | 'room')), и этот файл даёт ей то же самое поверх Firebase.
+// Подключается только в сборке приложения (build_pwa.js), до основного кода страницы.
+(function () {
+  'use strict';
+  const CONFIG = {
+    apiKey: 'AIzaSyCbgP7CLn_uM7WpI4h7dX9x0hzemOjwFxs',
+    authDomain: 'shashki-troih.firebaseapp.com',
+    projectId: 'shashki-troih',
+    storageBucket: 'shashki-troih.firebasestorage.app',
+    messagingSenderId: '901686163085',
+    appId: '1:901686163085:web:74c4c6d8612d3ae01954c4',
+  };
+  const V = '10.12.2';
+  const CDN = `https://www.gstatic.com/firebasejs/${V}/`;
+
+  let F = null; // модули Firebase
+  let auth = null, fs = null, me = null; // me — вошедший пользователь Firebase
+  let profile = null; // players/<uid>: { num, name, photo }
+
+  // Firebase грузится из интернета; без сети приложение играет как раньше (одно устройство и компьютеры)
+  const boot = (async () => {
+    try {
+      const [app, au, st] = await Promise.all([import(CDN + 'firebase-app.js'), import(CDN + 'firebase-auth.js'), import(CDN + 'firebase-firestore.js')]);
+      F = Object.assign({}, app, au, st);
+      const a = F.initializeApp(CONFIG);
+      auth = F.getAuth(a);
+      fs = F.getFirestore(a);
+      await F.getRedirectResult(auth).catch(() => null);
+      me = await new Promise((res) => { const off = F.onAuthStateChanged(auth, (u) => { off(); res(u); }); });
+      if (me) await ensureProfile();
+      return true;
+    } catch (e) {
+      console.warn('Firebase недоступен', e);
+      return false;
+    }
+  })();
+
+  // ---------- переходник под API хранилища claude.ai ----------
+  const snapOf = (s) => ({ exists: s.exists(), data: () => s.data(), metadata: { fromCache: s.metadata.fromCache } });
+  function docApi(path) {
+    const ref = F.doc(fs, path);
+    return {
+      get: async () => snapOf(await F.getDoc(ref)),
+      set: (obj) => F.setDoc(ref, obj),
+      update: (obj) => F.setDoc(ref, obj, { merge: true }),
+      onSnapshot: (cb, err) => F.onSnapshot(ref, (s) => cb(snapOf(s)), err || (() => {})),
+    };
+  }
+  const dbApi = { doc: docApi };
+  const userApi = {
+    id: async () => (me ? me.uid : null),
+    can: async () => true,
+    profiles: async (ids) => {
+      const out = {};
+      await Promise.all(ids.map(async (id) => {
+        try {
+          const s = await F.getDoc(F.doc(fs, 'players/' + id));
+          if (s.exists()) out[id] = { name: s.data().name || 'Игрок', avatarUrl: s.data().photo || '' };
+        } catch (e) { /* без имени */ }
+      }));
+      return out;
+    },
+  };
+  // Смайлики в комнате: короткие записи chat/<комната>/msgs, слушаем только новые
+  const roomApi = {
+    join: async (name) => {
+      const col = F.collection(fs, 'chat', name, 'msgs');
+      const since = Date.now() - 2000;
+      const handlers = {};
+      const off = F.onSnapshot(F.query(col, F.where('ts', '>', since)), (qs) => {
+        for (const ch of qs.docChanges()) {
+          if (ch.type !== 'added') continue;
+          const m = ch.doc.data();
+          if (handlers[m.topic]) handlers[m.topic]({ by: m.by, data: m.data });
+        }
+      }, () => {});
+      return {
+        on: (topic, fn) => { handlers[topic] = fn; },
+        emit: (topic, data) => F.addDoc(col, { topic, data, by: me.uid, ts: Date.now() }),
+        leave: async () => off(),
+      };
+    },
+  };
+  window.claude = {
+    use: async (name) => {
+      if (!(await boot) || !me) return null;
+      if (name === 'db') return dbApi;
+      if (name === 'user') return userApi;
+      if (name === 'room') return roomApi;
+      return null;
+    },
+  };
+
+  // ---------- профиль и ID ----------
+  async function ensureProfile() {
+    const ref = F.doc(fs, 'players/' + me.uid);
+    const s = await F.getDoc(ref);
+    const name = (me.displayName || 'Игрок').slice(0, 40);
+    const photo = me.photoURL || '';
+    if (s.exists() && s.data().num) {
+      profile = s.data();
+      if (profile.name !== name || profile.photo !== photo) { profile = Object.assign({}, profile, { name, photo }); await F.setDoc(ref, { name, photo }, { merge: true }); }
+      return;
+    }
+    // ID — 6 цифр, свободный (ids/<номер> занимается один раз и навсегда)
+    for (let k = 0; k < 8; k++) {
+      const num = String(100000 + Math.floor(Math.random() * 900000));
+      try {
+        await F.setDoc(F.doc(fs, 'ids/' + num), { uid: me.uid });
+        profile = { num, name, photo };
+        await F.setDoc(ref, profile);
+        return;
+      } catch (e) { /* номер занят — другой */ }
+    }
+    throw new Error('не удалось выдать ID');
+  }
+
+  async function signIn() {
+    if (!(await boot)) { toast('Нет связи с сервером — проверьте интернет'); return; }
+    const prov = new F.GoogleAuthProvider();
+    prov.setCustomParameters({ prompt: 'select_account' });
+    try {
+      await F.signInWithPopup(auth, prov);
+      location.reload(); // страница заново подключится уже со входом
+    } catch (e) {
+      if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) await F.signInWithRedirect(auth, prov);
+      else if (e && e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') toast('Не получилось войти: ' + (e.code || e.message));
+    }
+  }
+  async function signOut() {
+    await F.signOut(auth);
+    location.reload();
+  }
+
+  // ---------- интерфейс ----------
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const toast = (t) => (window.C3 ? window.C3.toast(t) : alert(t));
+  const pairId = (a, b) => (a < b ? a + '_' + b : b + '_' + a);
+  let friends = []; // [{ id, other, status, from, name, photo, num }]
+  let inviteMode = false;
+
+  function injectUi() {
+    const css = document.createElement('style');
+    css.textContent = `
+      .who-me{display:flex;align-items:center;gap:10px;justify-content:center;margin:6px 0 2px;font-weight:600}
+      .who-me img{width:34px;height:34px;border-radius:50%}
+      .who-me small{display:block;font-weight:400;opacity:.75}
+      .g-btn{display:inline-flex;align-items:center;gap:10px;justify-content:center}
+      .g-btn svg{width:20px;height:20px}
+      .fr-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto}
+      .fr-list li{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:14px;background:color-mix(in srgb,var(--ink) 6%,transparent)}
+      .fr-list img,.fr-list .ph{width:40px;height:40px;border-radius:10px;flex:none;object-fit:cover;background:var(--muted)}
+      .fr-list .nm{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .fr-list .nm small{display:block;font-weight:400;opacity:.7}
+      .fr-plus{width:40px;height:40px;border-radius:50%;border:2px solid var(--accent);background:none;color:var(--accent);font-size:24px;line-height:1;flex:none}
+      .fr-plus[disabled]{opacity:.45}
+      .fr-add{display:flex;gap:8px}.fr-add input{flex:1;min-width:0;font-size:1.05rem;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+      .myid{font-size:1.35rem;font-weight:700;letter-spacing:.06em}
+      .inv-bar{position:fixed;left:12px;right:12px;top:calc(12px + env(safe-area-inset-top,0px));z-index:9998;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;background:#14433d;color:#fff;box-shadow:0 8px 28px rgba(0,0,0,.35);font-weight:600}
+      .inv-bar img{width:40px;height:40px;border-radius:10px}
+      .inv-bar span{flex:1}
+      .inv-bar button{border:0;border-radius:12px;padding:10px 12px;font-weight:700}
+      .inv-bar .yes{background:#f2c94c;color:#1b1b1b}.inv-bar .no{background:rgba(255,255,255,.15);color:#fff}
+      .fr-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#e5484d;color:#fff;font-size:.75rem;margin-left:6px}`;
+    document.head.appendChild(css);
+
+    // В меню: кто вошёл (или кнопка входа) и «Друзья»
+    const list = document.querySelector('#menu .menu-list');
+    const who = document.createElement('div');
+    who.id = 'who-me';
+    list.parentNode.insertBefore(who, list);
+    const fb = document.createElement('button');
+    fb.className = 'menu-btn';
+    fb.type = 'button';
+    fb.id = 'm-friends';
+    fb.innerHTML = 'Друзья<small>Добавить по ID, заявки, позвать в игру</small>';
+    $('m-online').after(fb);
+    fb.addEventListener('click', () => openFriends(false));
+
+    // Окно друзей — в том же стиле, что и остальные окна игры
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    sheet.id = 'sheet-friends';
+    sheet.hidden = true;
+    sheet.innerHTML = `<div class="sheet-box" role="dialog" aria-modal="true" aria-labelledby="fr-title">
+      <h2 id="fr-title">Друзья</h2>
+      <div id="fr-body"></div>
+      <div class="row"><button class="btn" type="button" data-close>Закрыть</button></div></div>`;
+    document.body.appendChild(sheet);
+    sheet.addEventListener('click', (e) => { if (e.target === sheet || e.target.closest('[data-close]')) sheet.hidden = true; });
+
+    const bar = document.createElement('div');
+    bar.className = 'inv-bar';
+    bar.id = 'inv-bar';
+    bar.hidden = true;
+    document.body.appendChild(bar);
+    renderWho();
+  }
+
+  const GOOGLE = '<svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.5l6.7-6.7C35.6 2.4 30.1 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.8 6.1C12.3 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17.5z"/><path fill="#FBBC05" d="M10.4 28.7c-.5-1.4-.8-3-.8-4.7s.3-3.2.8-4.7l-7.8-6.1C.9 16.5 0 20.1 0 24s.9 7.5 2.6 10.8l7.8-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.7-4.1-13.6-9.8l-7.8 6.1C6.6 42.6 14.6 48 24 48z"/></svg>';
+
+  function renderWho() {
+    const who = $('who-me');
+    if (!who) return;
+    const incoming = friends.filter((f) => f.status === 'pending' && f.from !== me?.uid).length;
+    $('m-friends').innerHTML = 'Друзья' + (incoming ? `<span class="fr-count">${incoming}</span>` : '') + '<small>Добавить по ID, заявки, позвать в игру</small>';
+    if (me && profile) {
+      who.innerHTML = `<div class="who-me">${profile.photo ? `<img src="${esc(profile.photo)}" alt="" referrerpolicy="no-referrer">` : ''}<span>${esc(profile.name)}<small>ID ${esc(profile.num)}</small></span></div>`;
+    } else {
+      who.innerHTML = `<div class="who-me"><button class="btn g-btn" type="button" id="btn-signin">${GOOGLE}Войти через Google</button></div>`;
+      $('btn-signin').addEventListener('click', signIn);
+    }
+  }
+
+  // ---------- друзья ----------
+  async function loadFriendProfiles() {
+    await Promise.all(friends.map(async (f) => {
+      if (f.name) return;
+      try {
+        const s = await F.getDoc(F.doc(fs, 'players/' + f.other));
+        if (s.exists()) Object.assign(f, { name: s.data().name, photo: s.data().photo, num: s.data().num });
+      } catch (e) { /* без имени */ }
+    }));
+  }
+  const cache = {};
+  function watchFriends() {
+    const q = F.query(F.collection(fs, 'friendships'), F.where('users', 'array-contains', me.uid));
+    F.onSnapshot(q, async (qs) => {
+      friends = qs.docs.map((d) => {
+        const x = d.data();
+        const other = x.users.find((u) => u !== me.uid) || me.uid;
+        return Object.assign({ id: d.id, other, status: x.status, from: x.from }, cache[other] || {});
+      });
+      await loadFriendProfiles();
+      for (const f of friends) if (f.name) cache[f.other] = { name: f.name, photo: f.photo, num: f.num };
+      renderWho();
+      if (!$('sheet-friends').hidden) renderFriends();
+    }, () => {});
+  }
+
+  async function addById(raw) {
+    const num = String(raw || '').replace(/\D/g, '');
+    if (num.length !== 6) return 'ID — 6 цифр';
+    if (num === profile.num) return 'Это ваш ID';
+    const s = await F.getDoc(F.doc(fs, 'ids/' + num));
+    if (!s.exists()) return 'Игрока с таким ID нет';
+    const other = s.data().uid;
+    const id = pairId(me.uid, other);
+    const ex = friends.find((f) => f.id === id);
+    if (ex) {
+      if (ex.status === 'ok') return 'Вы уже друзья';
+      if (ex.from === me.uid) return 'Заявка уже отправлена';
+      await F.updateDoc(F.doc(fs, 'friendships/' + id), { status: 'ok' });
+      return '';
+    }
+    await F.setDoc(F.doc(fs, 'friendships/' + id), { users: [me.uid, other], from: me.uid, status: 'pending', ts: Date.now() });
+    toast('Заявка в друзья отправлена');
+    return '';
+  }
+
+  function face(f) {
+    return f.photo ? `<img src="${esc(f.photo)}" alt="" referrerpolicy="no-referrer">` : '<span class="ph"></span>';
+  }
+  function renderFriends() {
+    const body = $('fr-body');
+    if (!me || !profile) {
+      body.innerHTML = `<p>Чтобы добавлять друзей и звать их в игру, войдите через свой Google-аккаунт.</p>
+        <button class="btn primary g-btn" type="button" id="fr-signin" style="width:100%">${GOOGLE}Войти через Google</button>`;
+      $('fr-signin').addEventListener('click', signIn);
+      return;
+    }
+    const room = window.C3 && window.C3.room();
+    const canInvite = room && !room.started && room.seats.filter(Boolean).length < room.players;
+    const incoming = friends.filter((f) => f.status === 'pending' && f.from !== me.uid);
+    const outgoing = friends.filter((f) => f.status === 'pending' && f.from === me.uid);
+    const ok = friends.filter((f) => f.status === 'ok');
+    let h = '';
+    if (inviteMode && room) h += `<p><b>Позвать за стол ${esc(room.code)}</b> — нажмите «+» у друга:</p>`;
+    else h += `<p>Ваш ID: <span class="myid">${esc(profile.num)}</span> <button class="btn" type="button" id="fr-copy">Скопировать</button></p>
+      <form class="fr-add" id="fr-add"><input id="fr-num" inputmode="numeric" maxlength="6" placeholder="ID друга, 6 цифр" autocomplete="off"><button class="btn primary" type="submit">Добавить</button></form>
+      <p class="err" id="fr-err" hidden></p>`;
+    if (incoming.length) {
+      h += '<p><b>Заявки в друзья</b></p><ul class="fr-list">' + incoming.map((f) => `<li>${face(f)}<span class="nm">${esc(f.name || 'Игрок')}<small>ID ${esc(f.num || '')}</small></span>
+        <button class="btn primary" type="button" data-accept="${esc(f.id)}">Принять</button><button class="btn" type="button" data-drop="${esc(f.id)}">✕</button></li>`).join('') + '</ul>';
+    }
+    h += `<p><b>Друзья</b>${ok.length ? '' : ' — пока никого. Попросите у друга его ID и добавьте.'}</p>`;
+    if (ok.length) {
+      h += '<ul class="fr-list">' + ok.map((f) => {
+        const seated = room && room.seats.includes(f.other);
+        const btn = canInvite
+          ? `<button class="fr-plus" type="button" data-invite="${esc(f.other)}" ${seated ? 'disabled' : ''} aria-label="Позвать в игру">${seated ? '✓' : '+'}</button>`
+          : (inviteMode ? '' : `<button class="btn" type="button" data-drop="${esc(f.id)}" aria-label="Удалить из друзей">✕</button>`);
+        return `<li>${face(f)}<span class="nm">${esc(f.name || 'Игрок')}<small>ID ${esc(f.num || '')}</small></span>${btn}</li>`;
+      }).join('') + '</ul>';
+    }
+    if (outgoing.length && !inviteMode) h += `<p style="opacity:.75">Ждут ответа: ${outgoing.map((f) => esc(f.name || 'Игрок')).join(', ')}</p>`;
+    if (!inviteMode) h += `<p style="margin-top:14px"><button class="btn" type="button" id="fr-out">Выйти из аккаунта</button></p>`;
+    body.innerHTML = h;
+
+    const err = (t) => { const e = $('fr-err'); if (e) { e.textContent = t; e.hidden = !t; } };
+    if ($('fr-add')) $('fr-add').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try { err(await addById($('fr-num').value)); if (!$('fr-err').textContent) $('fr-num').value = ''; } catch (x) { err('Не получилось — проверьте интернет'); }
+    });
+    if ($('fr-copy')) $('fr-copy').addEventListener('click', () => {
+      try { navigator.clipboard.writeText(profile.num).then(() => toast('ID скопирован: ' + profile.num), () => toast('Ваш ID: ' + profile.num)); } catch (e) { toast('Ваш ID: ' + profile.num); }
+    });
+    if ($('fr-out')) $('fr-out').addEventListener('click', signOut);
+    for (const b of body.querySelectorAll('[data-accept]')) b.addEventListener('click', () => F.updateDoc(F.doc(fs, 'friendships/' + b.dataset.accept), { status: 'ok' }).catch(() => toast('Не получилось')));
+    for (const b of body.querySelectorAll('[data-drop]')) b.addEventListener('click', () => F.deleteDoc(F.doc(fs, 'friendships/' + b.dataset.drop)).catch(() => toast('Не получилось')));
+    for (const b of body.querySelectorAll('[data-invite]')) b.addEventListener('click', () => invite(b.dataset.invite, b));
+  }
+
+  async function openFriends(forInvite) {
+    inviteMode = !!forInvite;
+    if (window.C3) window.C3.closeSheets();
+    $('fr-title').textContent = inviteMode ? 'Пригласить друзей' : 'Друзья';
+    $('sheet-friends').hidden = false;
+    renderFriends();
+  }
+
+  // ---------- приглашения ----------
+  async function invite(to, btn) {
+    const room = window.C3 && window.C3.room();
+    if (!room) return;
+    btn.disabled = true;
+    try {
+      await F.setDoc(F.doc(fs, 'invites/' + to + '_' + me.uid), { to, from: me.uid, fromName: profile.name, fromPhoto: profile.photo || '', code: room.code, ts: Date.now() });
+      btn.textContent = '✓';
+      toast('Приглашение отправлено');
+    } catch (e) { btn.disabled = false; toast('Не получилось отправить приглашение'); }
+  }
+  function watchInvites() {
+    const q = F.query(F.collection(fs, 'invites'), F.where('to', '==', me.uid));
+    F.onSnapshot(q, (qs) => {
+      // Показываем самое свежее приглашение не старше 15 минут
+      const fresh = qs.docs.map((d) => Object.assign({ id: d.id }, d.data())).filter((x) => Date.now() - x.ts < 15 * 60 * 1000).sort((a, b) => b.ts - a.ts);
+      for (const d of qs.docs) if (Date.now() - d.data().ts >= 15 * 60 * 1000) F.deleteDoc(d.ref).catch(() => {});
+      const bar = $('inv-bar');
+      const x = fresh[0];
+      if (!x) { bar.hidden = true; return; }
+      bar.innerHTML = `${x.fromPhoto ? `<img src="${esc(x.fromPhoto)}" alt="" referrerpolicy="no-referrer">` : ''}<span>${esc(x.fromName || 'Друг')} зовёт в шашки</span>
+        <button class="yes" type="button">Играть</button><button class="no" type="button" aria-label="Отказаться">✕</button>`;
+      bar.hidden = false;
+      const drop = () => F.deleteDoc(F.doc(fs, 'invites/' + x.id)).catch(() => {});
+      bar.querySelector('.yes').onclick = () => { drop(); bar.hidden = true; window.C3.joinRoom(x.code); };
+      bar.querySelector('.no').onclick = () => { drop(); bar.hidden = true; };
+    }, () => {});
+  }
+
+  window.C3Social = { signIn, openFriends };
+  const onReady = () => {
+    injectUi();
+    boot.then((ok) => { if (ok && me) { renderWho(); watchFriends(); watchInvites(); } else renderWho(); });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', onReady);
+  else onReady();
+})();
+
+</script>
 </head>
 <body>
 <title>Шашки на троих</title>
@@ -331,6 +692,25 @@
   }
   @media (prefers-reduced-motion: reduce) { #world, .pc, .lbl, .pc use { transition: none !important; } }
   @media (min-width: 560px) { h1 { font-size: 1.4rem; } .plate .name { font-size: 1rem; } }
+  /* Стол перед игрой: кто сел, пригласить друзей, пароль, «Начать» */
+  .board-wrap { position: relative; }
+  .lobby {
+    position: absolute; inset: 4% 6%; z-index: 4; display: flex; flex-direction: column; gap: 10px; justify-content: center;
+    background: var(--surface, #fff); color: var(--ink); border-radius: 22px; padding: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.28);
+    overflow: auto;
+  }
+  .lobby h2 { margin: 0; font-size: 1.15rem; text-align: center; }
+  .lobby-seats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .lobby-seats li { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 14px; background: color-mix(in srgb, var(--ink) 6%, transparent); }
+  .lobby-seats .av { width: 40px; height: 40px; border-radius: 10px; flex: none; display: grid; place-items: center; overflow: hidden; border: 3px solid; }
+  .lobby-seats .av img { width: 100%; height: 100%; object-fit: cover; }
+  .lobby-seats .av svg { width: 70%; height: 70%; }
+  .lobby-seats .who { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lobby-seats .who small { display: block; font-weight: 400; opacity: .7; }
+  .lobby-note { margin: 0; font-size: .85rem; opacity: .8; text-align: center; }
+  .lobby-pass { display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .lobby .btn { width: 100%; justify-content: center; }
+  .lobby-pass .btn { width: auto; }
 </style>
 
 <div class="app">
@@ -368,6 +748,15 @@
         <g id="pieces"></g>
       </g>
     </svg>
+    <div class="lobby" id="lobby" hidden>
+      <h2>Стол собирается</h2>
+      <ul class="lobby-seats" id="lobby-seats"></ul>
+      <p class="lobby-note" id="lobby-note"></p>
+      <button class="btn primary" id="lobby-invite" type="button" hidden>Пригласить друзей</button>
+      <div class="lobby-pass"><span>Пароль стола <b id="lobby-pass"></b></span><button class="btn" id="lobby-copy" type="button">Скопировать</button></div>
+      <button class="btn primary" id="lobby-start" type="button">Начать</button>
+      <button class="btn" id="lobby-leave" type="button">Выйти</button>
+    </div>
   </div>
 
   <div class="reacts" id="reacts" hidden aria-label="Реакции"></div>
@@ -470,7 +859,7 @@
     <div class="seg" data-opt="mode">
       <button type="button" data-val="local">Один телефон</button>
       <button type="button" data-val="bots">С компьютером</button>
-      <button type="button" data-val="online">По сети</button>
+      <button type="button" data-val="online">С друзьями</button>
     </div>
     <p class="opt-title">Игроки</p>
     <div class="seg big-digits" data-opt="players">
@@ -1071,6 +1460,7 @@
       const img = document.createElement('img');
       img.src = avatars[id];
       img.alt = '';
+      img.referrerPolicy = 'no-referrer';
       face.appendChild(img);
     } else face.insertAdjacentHTML('beforeend', k === 'bot' ? ROBOT : PERSON);
     const nm = document.createElement('span');
@@ -1273,7 +1663,7 @@
     busy = false;
     // По сети за компьютеров ходит только телефон хозяина комнаты
     // Пока открыто главное меню, компьютеры ждут
-    if (over() || !$('menu').hidden || !$('device').hidden || kind(game.turn) !== 'bot' || (mode === 'online' && room.host !== myId)) { refresh(); return; }
+    if (over() || !$('menu').hidden || !$('device').hidden || kind(game.turn) !== 'bot' || (mode === 'online' && (room.host !== myId || !room.started))) { refresh(); return; }
     busy = true;
     refresh();
     botTimer = setTimeout(() => {
@@ -1284,7 +1674,7 @@
   }
 
   function onCell(i) {
-    if (busy || over() || kind(game.turn) !== 'human' || pushing) return;
+    if (busy || over() || kind(game.turn) !== 'human' || pushing || (mode === 'online' && !room.started)) return;
     const moves = selected >= 0 ? legal.filter((m) => m.from === selected && m.to === i) : [];
     if (moves.length) {
       // В одну клетку можно прийти разными цепочками — берём ту, где взято больше
@@ -1560,7 +1950,7 @@
   $('m-device').addEventListener('click', () => { $('menu').hidden = true; showDevice(); });
   $('m-continue').addEventListener('click', () => {
     const code = mode === 'online' ? null : savedRoom();
-    if (code) ready.then(() => { if (db && myId) enterRoom(code); else { toast('Комната работает только по ссылке на claude.ai'); hideMenu(); } });
+    if (code) ready.then(() => { if (db && myId) enterRoom(code); else { toast(window.C3Social ? 'Сначала войдите через Google' : 'Комната работает только по ссылке на claude.ai'); hideMenu(); } });
     else hideMenu();
   });
   $('m-online').addEventListener('click', openOnline);
@@ -1617,6 +2007,7 @@
     if (draft.mode === 'online') {
       await ready;
       if (!db || !myId) {
+        if (window.C3Social) { window.C3Social.signIn(); return; }
         $('create-err').textContent = 'Игра по сети работает, когда игра открыта по ссылке на claude.ai и вы вошли в аккаунт.';
         $('create-err').hidden = false;
         return;
@@ -1699,6 +2090,8 @@
     b.addEventListener('click', () => { stakePick = +b.dataset.stake; renderCoins(); });
   }
 
+  // Сколько живых людей сидит за столом (компьютеры не считаются)
+  const humansAt = () => (room ? room.seats.filter((id, i) => id && !room.bots[i]).length : 0);
   const potOf = () => Object.keys(room.stakes || {}).filter((k) => k.startsWith(room.round + '_'))
     .reduce((s, k) => s + (Number(room.stakes[k]) || 0), 0);
   // Ставки: севший за стол кладёт ставку в банк; в конце победитель забирает банк,
@@ -1708,7 +2101,7 @@
     const key = room.round + '_' + myId;
     settling = true;
     try {
-      if (room.seats.includes(myId) && !over() && !(key in room.stakes)) {
+      if (room.started && humansAt() >= 2 && room.seats.includes(myId) && !over() && !(key in room.stakes)) {
         const amt = coins >= room.stake ? room.stake : 0;
         if (amt) await changeCoins(-amt);
         await roomRef(room.code).update({ stakes: { [key]: amt } });
@@ -1792,6 +2185,7 @@
     $('online-why').textContent = 'Подключаемся…';
     await ready;
     if (!db || !myId) {
+      if (window.C3Social) { closeSheets(); window.C3Social.signIn(); return; }
       $('online-why').textContent = 'Игра по сети работает, когда игра открыта по ссылке на claude.ai и вы вошли в свой аккаунт. Файл на телефоне и предпросмотр играют только на одном устройстве.';
       return;
     }
@@ -1823,7 +2217,7 @@
       const seatsNow = [null, null, null];
       seatsNow[color] = myId;
       await roomRef(code).set({ game: plain(rules.newGame()), seats: seatsNow, bots: [false, false, false], host: myId, rev: 1, created: Date.now(),
-        stake: stakePick, round: 1, stakes: {}, settled: {}, refunds: {} });
+        stake: stakePick, round: 1, stakes: {}, settled: {}, refunds: {}, started: false });
       enterRoom(code);
     } catch (e) {
       fail(e && e.code === 'invalid_argument'
@@ -1832,8 +2226,10 @@
     }
   }
 
+  let autoSit = false;
   async function joinRoom(raw) {
     const code = cleanCode(raw);
+    autoSit = true;
     onlineError('');
     if (code.length !== 4) { onlineError('Код — 4 знака, например K7QM'); return; }
     try {
@@ -1870,7 +2266,14 @@
       room = {
         code, seats: d.seats.slice(), bots: d.bots.slice(), host: d.host, rev: d.rev,
         stake: Number(d.stake) || 0, round: Number(d.round) || 1, stakes: d.stakes || {}, settled: d.settled || {}, refunds: d.refunds || {},
+        started: d.started !== false, players: (d.game && d.game.cfg && d.game.cfg.players) || 3,
       };
+      // Пришли по приглашению или паролю — садимся на первое свободное место
+      if (autoSit && !room.started && room.seats.indexOf(myId) < 0) {
+        autoSit = false;
+        const free = [0, 1, 2].find((c) => c < room.players && !room.seats[c]);
+        if (free !== undefined) takeSeat(free);
+      }
       if (d.rev !== localRev && !pushing) applyRemote(plain(d.game), d.rev);
       resolveNames();
       refresh();
@@ -1951,10 +2354,72 @@
         if (s.exists && wallets[id] !== s.data().coins) { wallets[id] = s.data().coins; renderPlayers(); }
       }).catch(() => {});
     }
-    if (changed) { renderPlayers(); renderStatus(); }
+    if (changed) { renderPlayers(); renderStatus(); renderLobby(); }
   }
 
+  function renderLobby() {
+    const box = $('lobby');
+    box.hidden = !(mode === 'online' && room && room.rev && !room.started);
+    if (box.hidden) return;
+    const list = $('lobby-seats');
+    list.textContent = '';
+    for (let c = 0; c < room.players; c++) {
+      const id = room.seats[c];
+      const li = document.createElement('li');
+      const av = document.createElement('span');
+      av.className = 'av';
+      av.style.background = TILE_BG[c];
+      av.style.color = TILE_FG[c];
+      av.style.borderColor = FILL[c];
+      if (id && avatars[id]) { const img = document.createElement('img'); img.referrerPolicy = 'no-referrer'; img.src = avatars[id]; img.alt = ''; av.appendChild(img); }
+      else av.insertAdjacentHTML('beforeend', id ? PERSON : ROBOT);
+      const who = document.createElement('span');
+      who.className = 'who';
+      who.textContent = id ? (id === myId ? (names[id] || 'Вы') + ' (вы)' : names[id] || 'Игрок') : 'Свободно';
+      const sm = document.createElement('small');
+      sm.textContent = NAMES[c] + (id ? (id === room.host ? ' · хозяин стола' : '') : ' · если никто не сядет — компьютер');
+      who.appendChild(sm);
+      li.append(av, who);
+      if (!id && room.seats.indexOf(myId) < 0) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'seat';
+        b.textContent = 'Сесть';
+        b.addEventListener('click', () => takeSeat(c));
+        li.appendChild(b);
+      }
+      list.appendChild(li);
+    }
+    const people = humansAt();
+    const amHost = room.host === myId;
+    $('lobby-pass').textContent = room.code;
+    $('lobby-invite').hidden = !window.C3Social;
+    $('lobby-start').hidden = !amHost;
+    $('lobby-start').textContent = people >= 2 ? 'Начать' : 'Начать с компьютерами';
+    let note = people >= 2
+      ? (room.stake ? `Ставка ${room.stake} монет с каждого — победитель забирает банк.` : 'Без ставки.')
+      : 'Позовите друзей или начните с компьютерами — тогда монеты не считаются.';
+    if (!amHost) note += ' Ждём, когда хозяин стола нажмёт «Начать».';
+    $('lobby-note').textContent = note;
+  }
+  async function startTable() {
+    if (!room || room.host !== myId || room.started) return;
+    const bots = [0, 1, 2].map((c) => c < room.players && !room.seats[c]);
+    const people = room.seats.filter(Boolean).length;
+    try {
+      await roomRef(room.code).update({ started: true, bots, stake: people >= 2 ? room.stake : 0 });
+    } catch (e) { toast('Не получилось начать — проверьте интернет'); }
+  }
+  $('lobby-start').addEventListener('click', startTable);
+  $('lobby-leave').addEventListener('click', () => { leaveRoom(); showMenu(); });
+  $('lobby-copy').addEventListener('click', () => {
+    const code = room ? room.code : '';
+    try { navigator.clipboard.writeText(code).then(() => toast('Пароль скопирован: ' + code), () => toast('Пароль: ' + code)); } catch (e) { toast('Пароль: ' + code); }
+  });
+  $('lobby-invite').addEventListener('click', () => { if (window.C3Social) window.C3Social.openFriends(true); });
+
   function renderRoom() {
+    renderLobby();
     $('roombar').hidden = mode !== 'online';
     if (mode !== 'online') return;
     $('room-code').textContent = room.code;
@@ -1998,6 +2463,14 @@
       navigator.clipboard.writeText(code).then(() => toast('Код скопирован: ' + code), () => toast('Код комнаты: ' + code));
     } catch (e) { toast('Код комнаты: ' + code); }
   });
+
+  // Для модуля друзей в приложении: войти в стол, узнать, где мы сейчас
+  window.C3 = {
+    joinRoom: (code) => { closeSheets(); $('menu').hidden = true; $('create').hidden = true; return joinRoom(code); },
+    room: () => (mode === 'online' ? room : null),
+    myId: () => myId, toast, openSheet, closeSheets, showMenu, ready,
+    rerender: () => { if ($('menu').hidden === false) showMenu(); },
+  };
 
   // ---------- запуск ----------
   function start(saved) {
