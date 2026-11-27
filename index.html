@@ -2029,6 +2029,32 @@
 })();
 </script>
 
-<script>if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));</script>
+<div id="inst" hidden style="position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:9999;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;background:#14433d;color:#fff;box-shadow:0 8px 28px rgba(0,0,0,.35);font:600 14px system-ui,sans-serif">
+  <img src="icon-192.png" alt="" width="40" height="40" style="border-radius:10px">
+  <span style="flex:1">Поставить игру на телефон — будет значок и игра без интернета</span>
+  <button id="inst-go" type="button" style="border:0;border-radius:12px;padding:10px 14px;background:#f2c94c;color:#1b1b1b;font:700 15px system-ui,sans-serif">Установить</button>
+  <button id="inst-x" type="button" aria-label="Закрыть" style="border:0;background:none;color:#fff;font-size:20px;padding:4px">×</button>
+</div>
+<script>
+(function () {
+  if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  // Кнопка «Установить»: на Android — системное окно установки одним нажатием, на iPhone — подсказка
+  const box = document.getElementById('inst');
+  const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  let skip = false; try { skip = sessionStorage.getItem('inst-x') === '1'; } catch (e) {}
+  if (installed || skip) return;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  let ask = null;
+  addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); ask = e; box.hidden = false; });
+  addEventListener('appinstalled', () => { box.hidden = true; });
+  if (ios) box.hidden = false;
+  document.getElementById('inst-go').onclick = async () => {
+    if (ask) { ask.prompt(); const r = await ask.userChoice; ask = null; if (r.outcome === 'accepted') box.hidden = true; return; }
+    alert(ios ? 'Нажмите кнопку «Поделиться» (квадрат со стрелкой) внизу Safari → «На экран «Домой»» → «Добавить».'
+              : 'Откройте меню браузера ⋮ → «Установить приложение» или «Добавить на главный экран».');
+  };
+  document.getElementById('inst-x').onclick = () => { box.hidden = true; try { sessionStorage.setItem('inst-x', '1'); } catch (e) {} };
+})();
+</script>
 </body>
 </html>

@@ -1,5 +1,5 @@
 // Офлайн-кэш приложения «Шашки на троих»
-const CACHE = 'checkers3-a38893b42e';
+const CACHE = 'checkers3-4dc39d40c8';
 const FILES = ["./","index.html","manifest.webmanifest","icon.svg","icon-192.png","icon-512.png"];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
