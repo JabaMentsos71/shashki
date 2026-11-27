@@ -1,0 +1,2034 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d6b62">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Шашки">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}img{max-width:100%}[hidden]{display:none!important}
+/* В приложении игры по сети нет — она работает только на claude.ai */
+#m-online,#create [data-opt="mode"] [data-val="online"],#create-online,#btn-online,[data-goto="online"]{display:none!important}</style>
+<script>try{const k='checkers3-create',d=JSON.parse(localStorage.getItem(k)||'null');if(d&&d.mode==='online'){d.mode='bots';localStorage.setItem(k,JSON.stringify(d));}}catch(e){}</script>
+</head>
+<body>
+<title>Шашки на троих</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Unbounded:wght@500;700&display=swap" media="print" onload="this.media='all'">
+<style>
+  /* Доска — главное на экране: шестиугольник из дерева, сверху три таблички игроков, снизу кнопки */
+  :root {
+    --bg: #e6ebe6; --surface: #f7f8f4; --ink: #1b2320; --muted: #5a6762; --line: #c7cfc9;
+    --accent: #1d6b62; --accent-ink: #ffffff; --danger: #b3362c; --mark: rgba(29, 107, 98, 0.55);
+    --cell-light: #e4d3ae; --cell-dark: #a67b52; --rim: #4f3a2a; --rim-ink: #e9dcc2;
+    --w-fill: #fbf8f0; --w-line: #2b241d; --g-fill: #9aa4ae; --g-line: #1d2328; --b-fill: #25201c; --b-line: #d9ceb9;
+    --felt-a: #3f8296; --felt-b: #24566a; --felt-ink: #f3f8f8;
+    --coin: #f2c14e; --coin-edge: #b8862a; --coin-bg: #f6e7bd; --coin-ink: #5a4310;
+    --font-display: "Unbounded", "Segoe UI", system-ui, sans-serif;
+    --font-ui: "Manrope", "Segoe UI", system-ui, sans-serif;
+    --dur: 0.3s;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131816; --surface: #1c2320; --ink: #e5ebe7; --muted: #98a6a0; --line: #2c3632;
+      --accent: #4fb2a4; --accent-ink: #0d1412; --danger: #e0675b; --mark: rgba(79, 178, 164, 0.6); --coin-bg: #3a3016; --coin-ink: #f3d68a; --felt-a: #24414a; --felt-b: #121f25;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131816; --surface: #1c2320; --ink: #e5ebe7; --muted: #98a6a0; --line: #2c3632;
+    --accent: #4fb2a4; --accent-ink: #0d1412; --danger: #e0675b; --mark: rgba(79, 178, 164, 0.6); --coin-bg: #3a3016; --coin-ink: #f3d68a; --felt-a: #24414a; --felt-b: #121f25;
+    color-scheme: dark;
+  }
+  /* Темы оформления: поверх светлой или тёмной основы — свой фон, акцент и доска */
+  :root[data-skin="forest"] { --felt-a: #4a7a3f; --felt-b: #2b4a26;
+    --bg: #e3ead9; --surface: #f4f7ee; --line: #c3cfb4; --accent: #3f6d2e; --mark: rgba(63, 109, 46, 0.55);
+    --cell-light: #e2ebc6; --cell-dark: #6e8f4d; --rim: #2f4a26;
+  }
+  :root[data-skin="ocean"] { --felt-a: #1f5a7e; --felt-b: #0f2d45;
+    --bg: #0f1d2a; --surface: #172a3a; --ink: #e4eef5; --muted: #93abbd; --line: #284255; --accent: #4cc3e0; --accent-ink: #062030;
+    --mark: rgba(76, 195, 224, 0.6); --cell-light: #d3e8f1; --cell-dark: #3f7fa3; --rim: #0b2536;
+  }
+  :root[data-skin="marble"] { --felt-a: #9a6670; --felt-b: #6c4049;
+    --bg: #f2ebe6; --surface: #fbf8f5; --line: #ddcfc6; --accent: #9a4f5f; --mark: rgba(154, 79, 95, 0.5);
+    --cell-light: #f3efe9; --cell-dark: #bf9a86; --rim: #5e4743;
+  }
+  :root[data-skin="neon"] { --felt-a: #22245a; --felt-b: #0b0c1a;
+    --bg: #0b0c1a; --surface: #14162c; --ink: #eef0ff; --muted: #9ea3d6; --line: #2a2d55; --accent: #ff4fd8; --accent-ink: #1a0614;
+    --mark: rgba(255, 79, 216, 0.65); --cell-light: #3a3f78; --cell-dark: #1d2148; --rim: #05060f; --rim-ink: #9fe9ff;
+  }
+  :root[data-skin="candy"] { --felt-a: #d36b9b; --felt-b: #a2406f;
+    --bg: #fff0f5; --surface: #fffafc; --line: #f3c9da; --accent: #c2306e; --mark: rgba(194, 48, 110, 0.5);
+    --cell-light: #ffe4ef; --cell-dark: #ea8db1; --rim: #7a2a52;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 15px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    -webkit-tap-highlight-color: transparent;
+  }
+  .app { max-width: 660px; margin: 0 auto; padding-block: 12px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  h1 { font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; line-height: 1.05; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+  .top { flex-wrap: wrap; }
+  .top-actions { display: flex; gap: 6px; flex-wrap: wrap; min-width: 0; }
+  .top-actions .btn { padding: 7px 12px; font-size: 0.85rem; min-height: 38px; }
+  @media (max-width: 440px) { .top-actions .btn { padding: 6px 10px; font-size: 0.8rem; } }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .btn {
+    border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 9px 14px;
+    font-weight: 600; font-size: 0.9rem; min-height: 40px;
+  }
+  .btn:focus-visible, .seat:focus-visible, .choice:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .btn.warn { color: var(--danger); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+
+  /* Таблички игроков */
+  /* Игровой стол: сукно, соперники сверху, вы снизу — как в карточных играх */
+  body { background: radial-gradient(ellipse at 50% 38%, var(--felt-a), var(--felt-b)) fixed, var(--felt-b); }
+  .app > .top h1, .status { color: var(--felt-ink); }
+  .status small { color: var(--felt-ink); opacity: 0.75; }
+  .players { display: flex; justify-content: space-between; gap: 8px; padding: 0 4px; }
+  .tile { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 104px; position: relative; }
+  .face {
+    position: relative; width: 76px; height: 76px; border-radius: 16px; border: 3px solid; box-shadow: 0 6px 14px rgba(0, 0, 0, 0.28);
+    display: grid; place-items: center; transition: box-shadow 0.25s, transform 0.25s;
+  }
+  .face img { width: 100%; height: 100%; object-fit: cover; border-radius: 13px; }
+  .face > svg { width: 82%; height: 82%; margin-top: 6px; }
+  .face .nm {
+    position: absolute; left: 0; right: 0; bottom: 0; background: rgba(10, 12, 14, 0.62); color: #fff; font-size: 0.7rem; font-weight: 700;
+    text-align: center; padding: 2px 4px; border-radius: 0 0 12px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .face .badge {
+    position: absolute; top: -9px; right: -11px; display: inline-flex; align-items: center; gap: 2px; padding: 2px 7px 2px 3px;
+    border-radius: 999px; background: #ffd35a; color: #3a2a00; font-weight: 800; font-size: 0.78rem; border: 2px solid #fff;
+    font-variant-numeric: tabular-nums; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  }
+  .face .badge svg { width: 18px; height: 18px; }
+  .tile.turn .face { box-shadow: 0 0 0 4px #5fd46b, 0 0 22px rgba(95, 212, 107, 0.75); transform: translateY(-2px); }
+  .tile.won .face { box-shadow: 0 0 0 4px #ffd35a, 0 0 24px rgba(255, 211, 90, 0.8); }
+  .tile.out .face { filter: grayscale(1); opacity: 0.5; }
+  .tile .sub { font-size: 0.75rem; font-weight: 700; color: var(--felt-ink); text-align: center; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
+  .coins.mini { padding: 2px 8px; font-size: 0.72rem; }
+  .coins.mini::before { width: 9px; height: 9px; }
+  .tile .seat { width: 100%; min-height: 28px; padding: 3px 4px; font-size: 0.7rem; background: var(--surface); }
+  .roombar { padding: 6px 10px; gap: 6px; font-size: 0.85rem; }
+  @media (max-width: 440px) { .room-note { display: none; } }
+  .app .reacts { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; padding: 2px 2px 4px; scrollbar-width: none; }
+  .app .reacts button { width: 40px; height: 40px; font-size: 1.15rem; flex-shrink: 0; }
+  @media (min-width: 560px) { .app .reacts { justify-content: center; } }
+  .me-bar {
+    display: flex; align-items: center; gap: 12px; background: var(--surface); border-radius: 20px; padding: 12px;
+    box-shadow: 0 -2px 18px rgba(0, 0, 0, 0.18);
+  }
+  .me-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .me-bar .status { color: var(--ink); text-align: left; }
+  .me-bar .status small { color: var(--muted); opacity: 1; }
+  .me-bar .tile .sub { color: var(--ink); text-shadow: none; }
+  .me-bar .controls { justify-content: flex-start; }
+  .me-bar .controls .btn { min-height: 34px; padding: 5px 11px; font-size: 0.8rem; }
+  .plate {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px 7px;
+    display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: 5px; row-gap: 4px; align-items: center;
+    transition: border-color .2s, box-shadow .2s, opacity .2s;
+  }
+  .plate.turn { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .plate.out { opacity: 0.45; }
+  .plate svg { width: 24px; height: 24px; grid-row: span 2; }
+  .plate .name { font-weight: 700; font-size: 0.88rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .plate .state { font-size: 0.75rem; color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  .plate .state.check { color: var(--danger); font-weight: 700; }
+  .seat {
+    grid-column: 1 / -1; border: 1px dashed var(--line); background: transparent; border-radius: 8px;
+    padding: 4px 6px; font-size: 0.75rem; font-weight: 600; color: var(--muted); min-height: 30px;
+  }
+  .seat[aria-pressed="true"] { border-style: solid; color: var(--ink); }
+
+  /* Доска */
+  .board-wrap { width: 100%; max-width: min(620px, calc((100dvh - 270px) * 1.15)); margin: 0 auto; }
+  #board { width: 100%; height: auto; display: block; overflow: visible; touch-action: manipulation; user-select: none; }
+  #world, .pc, .lbl { transition: transform var(--dur) ease-in-out; }
+  .cell { stroke: rgba(40, 25, 12, 0.35); stroke-width: 0.25; }
+  .cell.l { fill: var(--cell-light); }
+  .cell.d { fill: var(--cell-dark); }
+  .rim { fill: var(--rim); }
+  .lbl { font-family: var(--font-ui); font-size: 5.2px; font-weight: 700; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+  .pc { pointer-events: none; }
+  .pc use { stroke-width: 1.7; stroke-linejoin: round; transition: opacity .25s; }
+  .detail, .eye { fill: none; }
+  .pc.gone use { opacity: 0; }
+  .marks * { pointer-events: none; }
+  .m-last { fill: rgba(255, 214, 92, 0.42); }
+  .m-sel { fill: none; stroke: var(--accent); stroke-width: 1.4; }
+  .m-dot { fill: var(--mark); }
+  .m-hit { fill: none; stroke: var(--mark); stroke-width: 1.3; }
+  .m-check { fill: rgba(220, 50, 40, 0.5); }
+
+  .status { margin: 0; text-align: center; font-weight: 600; min-height: 1.4em; text-wrap: balance; }
+  .status small { display: block; font-weight: 400; color: var(--muted); font-size: 0.8rem; }
+  .controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  details.log { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; }
+  details.log summary { cursor: pointer; font-weight: 600; }
+  #log { margin: 8px 0 0; padding-left: 1.6em; max-height: 220px; overflow-y: auto; font-variant-numeric: tabular-nums; font-size: 0.85rem; line-height: 1.6; }
+  #log b { font-weight: 700; }
+
+  /* Окна поверх доски */
+  .sheet {
+    position: fixed; inset: 0; z-index: 20; background: rgba(10, 14, 12, 0.5); display: flex; align-items: flex-end; justify-content: center;
+    padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  }
+  .sheet-box {
+    background: var(--surface); color: var(--ink); border-radius: 20px; padding: 20px; width: 100%; max-width: 480px;
+    max-height: calc(100% - 20px); overflow-y: auto; display: flex; flex-direction: column; gap: 14px;
+  }
+  .sheet h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; margin: 0; text-wrap: balance; }
+  .sheet p, .sheet li { line-height: 1.5; margin: 0; }
+  .sheet ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; }
+  .choices { display: grid; gap: 8px; }
+  .choice { text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: 12px; padding: 12px 14px; font-weight: 600; }
+  .choice small { display: block; font-weight: 400; color: var(--muted); margin-top: 2px; }
+  .seat-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .seat-row .seat { grid-column: auto; min-height: 44px; font-size: 0.85rem; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .places { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+  .roombar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--accent);
+    border-radius: 14px; padding: 8px 10px;
+  }
+  .roombar b { font-family: var(--font-display); letter-spacing: 0.08em; }
+  .roombar .btn { min-height: 34px; padding: 5px 12px; font-size: 0.82rem; }
+  .room-note { flex: 1 1 140px; color: var(--muted); font-size: 0.8rem; min-width: 0; }
+  .join-row { display: flex; gap: 8px; }
+  .join-row input {
+    flex: 1; min-width: 0; font: 700 1.3rem var(--font-display); letter-spacing: 0.15em; text-transform: uppercase; text-align: center;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 12px; padding: 8px;
+  }
+  .join-row input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .err { color: var(--danger); font-weight: 600; }
+  /* Главное меню при входе */
+  .menu {
+    position: fixed; inset: 0; z-index: 15; background: var(--bg); overflow-y: auto; display: flex; justify-content: center;
+    padding: calc(24px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  }
+  .menu-box { width: 100%; max-width: 440px; display: flex; flex-direction: column; align-items: center; gap: 12px; margin: auto 0; }
+  .menu-discs { display: flex; gap: 4px; }
+  .menu-discs svg { width: 64px; height: 64px; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)); }
+  .menu-discs svg:nth-child(2) { transform: translateY(-10px); }
+  .menu-title { font-size: clamp(2rem, 9vw, 2.6rem); text-align: center; }
+  .menu-sub { margin: 0; color: var(--muted); text-align: center; text-wrap: balance; }
+  .menu-list { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+  .menu-btn {
+    width: 100%; text-align: left; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 16px;
+    padding: 14px 16px; font-weight: 700; font-size: 1.05rem;
+  }
+  .menu-btn small { display: block; font-weight: 400; font-size: 0.82rem; color: var(--muted); margin-top: 3px; }
+  .menu-btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .menu-btn.primary small { color: inherit; opacity: 0.85; }
+  .menu-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .menu-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .menu-btn.small { text-align: center; font-size: 0.95rem; padding: 12px; }
+  .set-head { margin: 4px 0 -4px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .toggles { display: flex; flex-direction: column; gap: 4px; }
+  .toggle { display: flex; align-items: center; gap: 10px; padding: 8px 2px; font-weight: 600; cursor: pointer; }
+  .toggle input { width: 22px; height: 22px; accent-color: var(--accent); flex-shrink: 0; }
+  .device-row { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+  .device-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; border: 1px solid var(--line);
+    background: var(--surface); color: var(--ink); border-radius: 18px; padding: 18px 10px; font-weight: 700; font-size: 1.05rem;
+  }
+  .device-btn small { font-weight: 400; font-size: 0.8rem; color: var(--muted); }
+  .device-btn svg { width: 52px; height: 52px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+  .device-btn.guess { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .device-btn:focus-visible, .link-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .link-btn { background: none; border: none; color: var(--muted); text-decoration: underline; font-size: 0.85rem; padding: 6px; align-self: center; }
+  /* Раскладка для компьютера: доска слева во всю высоту, таблички, ход и кнопки — справа */
+  @media (min-width: 760px) {
+    .pc .app { max-width: 1180px; display: grid; grid-template-columns: minmax(0, 1fr) 360px; column-gap: 28px; align-items: start; }
+    .pc .app > * { grid-column: 2; }
+    .pc .app > .top { grid-column: 1 / -1; }
+    .pc .app > .board-wrap { grid-column: 1; grid-row: 2 / span 8; max-width: min(860px, calc((100dvh - 110px) * 1.15)); }
+    .pc .players { justify-content: space-around; }
+    .pc .me-bar { flex-direction: column; align-items: stretch; }
+    .pc .me-bar #me-slot { align-self: center; }
+  }
+  /* Экран «Создать игру»: сукно стола, белый текст, переключатели-«таблетки» и плитки режимов */
+  .menu.create { background: radial-gradient(ellipse at 50% 30%, var(--felt-a), var(--felt-b)); color: var(--felt-ink); }
+  .create-box { align-items: stretch; gap: 8px; max-width: 520px; }
+  .create-head { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
+  .create-head h2 { font-family: var(--font-display); font-size: 1.35rem; margin: 0; text-align: center; }
+  .create .link-btn { color: var(--felt-ink); }
+  .opt-title { margin: 10px 0 2px; font-family: var(--font-display); font-weight: 700; font-size: 0.95rem; text-align: center; }
+  .opt-note { margin: 0; text-align: center; font-size: 0.8rem; opacity: 0.85; min-height: 1em; }
+  .opt-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .seg { display: flex; background: rgba(255, 255, 255, 0.16); border-radius: 999px; padding: 4px; gap: 2px; }
+  .seg button {
+    flex: 1; border: 0; background: none; color: var(--felt-ink); border-radius: 999px; padding: 10px 6px; font-weight: 700; font-size: 0.92rem;
+    min-height: 44px; white-space: nowrap;
+  }
+  .seg.big-digits button { font-family: var(--font-display); font-size: 1.3rem; }
+  .seg button[aria-pressed="true"] { background: #fff; color: #c3283b; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18); }
+  .seg button[aria-pressed="true"]::after { content: " ✓"; }
+  .seg button:disabled { opacity: 0.35; }
+  .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .mode-card { display: grid; grid-template-rows: 1fr 1fr; border-radius: 16px; overflow: hidden; background: rgba(255, 255, 255, 0.14); }
+  .mode-card button {
+    border: 0; background: none; color: var(--felt-ink); padding: 10px 6px; text-align: center; min-height: 76px; line-height: 1.2;
+  }
+  .mode-card button b { display: block; font-size: 0.82rem; }
+  .mode-card button small { display: block; font-size: 0.68rem; opacity: 0.85; margin-top: 3px; }
+  .mode-card button[aria-pressed="true"] { background: #fff; color: #c3283b; }
+  .mode-card button[aria-pressed="true"] small { color: #5a6762; opacity: 1; }
+  .seg button:focus-visible, .mode-card button:focus-visible, .create-go:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+  .create-go {
+    margin-top: 14px; border: 2px solid rgba(255, 255, 255, 0.7); background: rgba(255, 255, 255, 0.18); color: #fff; border-radius: 999px;
+    padding: 14px; font-family: var(--font-display); font-weight: 700; font-size: 1.2rem;
+  }
+  .create .err { color: #ffd0cc; text-align: center; }
+  .no-anim #world, .no-anim .pc, .no-anim .lbl, .no-anim .pc use { transition: none !important; }
+  .theme-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .theme-card {
+    display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid var(--line); background: var(--bg);
+    border-radius: 12px; padding: 10px; font-weight: 600; font-size: 0.88rem; min-width: 0;
+  }
+  .theme-card[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+  .theme-card .swatch { width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15); }
+  /* Монеты, ставки и реакции */
+  .coins, .pot {
+    display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-variant-numeric: tabular-nums;
+    background: var(--coin-bg); color: var(--coin-ink); border-radius: 999px; padding: 6px 11px; font-size: 0.85rem; white-space: nowrap;
+  }
+  .coins::before, .pot::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--coin); box-shadow: inset 0 0 0 2px var(--coin-edge); }
+  .stake-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .stake-row .seat { min-height: 40px; padding: 6px 12px; font-size: 0.9rem; }
+  .coins-line { font-weight: 600; }
+  .reacts { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px; }
+  .reacts button {
+    border: 1px solid var(--line); background: var(--surface); border-radius: 999px; width: 44px; height: 44px; font-size: 1.35rem; line-height: 1;
+  }
+  .reacts button:active { transform: scale(0.9); }
+  .plate { position: relative; }
+  .bubble {
+    position: fixed; font-size: 1.9rem; pointer-events: none; z-index: 5;
+    animation: float-up 2.4s ease-out forwards;
+  }
+  @keyframes float-up { 0% { transform: translateY(8px) scale(0.6); opacity: 0; } 12% { transform: translateY(0) scale(1.15); opacity: 1; } 70% { opacity: 1; } 100% { transform: translateY(-36px) scale(1); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .bubble { animation: none; } }
+  .toast {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 30;
+    background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-weight: 600; max-width: calc(100% - 32px); text-align: center;
+  }
+  @media (prefers-reduced-motion: reduce) { #world, .pc, .lbl, .pc use { transition: none !important; } }
+  @media (min-width: 560px) { h1 { font-size: 1.4rem; } .plate .name { font-size: 1rem; } }
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>Шашки на&nbsp;троих</h1>
+    <div class="top-actions">
+      <span class="coins" id="coins" hidden title="Ваши монеты"></span>
+      <button class="btn" id="btn-menu" type="button">Меню</button>
+      <button class="btn" id="btn-online" type="button">По сети</button>
+      <button class="btn primary" id="btn-new" type="button">Новая игра</button>
+    </div>
+  </header>
+
+  <div class="roombar" id="roombar" hidden>
+    <span>Комната <b id="room-code"></b></span>
+    <span class="room-note" id="room-note"></span>
+    <span class="pot" id="room-pot" hidden></span>
+    <button class="btn" id="btn-copy" type="button">Копировать</button>
+    <button class="btn" id="btn-leave" type="button">Выйти</button>
+  </div>
+
+  <section class="players" id="players" aria-label="Игроки"></section>
+
+  <div class="board-wrap">
+    <svg id="board" viewBox="-114 -103 228 206" role="img" aria-label="Шестиугольная доска на троих">
+      <defs>
+        <symbol id="sym-M" viewBox="0 0 45 45"><ellipse cx="22.5" cy="27.5" rx="18" ry="12.5"/><ellipse cx="22.5" cy="21.5" rx="18" ry="12.5"/><ellipse class="detail" cx="22.5" cy="21.5" rx="11" ry="7.5"/></symbol>
+        <symbol id="sym-K" viewBox="0 0 45 45"><ellipse cx="22.5" cy="27.5" rx="18" ry="12.5"/><ellipse cx="22.5" cy="21.5" rx="18" ry="12.5"/><path class="detail" d="M14.5 25.5 13 16l5 4 4.5-6.5L27 20l5-4-1.5 9.5z"/></symbol>
+      </defs>
+      <g id="world">
+        <polygon class="rim" id="rim"></polygon>
+        <g id="cells"></g>
+        <g id="labels"></g>
+        <g class="marks" id="marks"></g>
+        <g id="pieces"></g>
+      </g>
+    </svg>
+  </div>
+
+  <div class="reacts" id="reacts" hidden aria-label="Реакции"></div>
+
+  <!-- Низ стола: ваша аватарка, чей ход и кнопки -->
+  <section class="me-bar" aria-label="Вы">
+    <div id="me-slot"></div>
+    <div class="me-side">
+      <p class="status" id="status" aria-live="polite"></p>
+      <div class="controls">
+        <button class="btn" id="btn-undo" type="button">Отменить ход</button>
+        <button class="btn" id="btn-rotate" type="button" aria-pressed="true">Поворачивать доску</button>
+        <button class="btn warn" id="btn-resign" type="button">Сдаться</button>
+      </div>
+    </div>
+  </section>
+
+  <details class="log">
+    <summary>Ходы партии</summary>
+    <ol id="log"></ol>
+  </details>
+</div>
+
+<div class="sheet" id="sheet-new" hidden>
+  <div class="sheet-box" role="dialog" aria-modal="true" aria-labelledby="new-title">
+    <h2 id="new-title">Новая партия</h2>
+    <div class="choices">
+      <button class="choice" type="button" data-preset="hhh">Трое за одним телефоном<small>Передавайте телефон по кругу — доска сама поворачивается к тому, кто ходит</small></button>
+      <button class="choice" type="button" data-preset="hbb">Я против двух компьютеров<small>Вы играете белыми</small></button>
+      <button class="choice" type="button" data-preset="hhb">Двое людей и компьютер<small>Серыми играет компьютер</small></button>
+      <button class="choice" type="button" data-preset="bbb">Смотреть, как играют компьютеры</button>
+    </div>
+    <p>Или выберите сами, кто за кого:</p>
+    <div class="seat-row" id="new-seats"></div>
+    <div class="row">
+      <button class="btn" type="button" data-close>Отмена</button>
+      <button class="btn primary" type="button" id="btn-start">Начать</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-online" hidden>
+  <div class="sheet-box" role="dialog" aria-modal="true" aria-labelledby="online-title">
+    <h2 id="online-title">Игра по сети</h2>
+    <p id="online-why">Каждый играет со своего телефона: один создаёт комнату, остальные входят по её коду.</p>
+    <p class="coins-line" id="coins-line" hidden></p>
+    <div id="online-body">
+      <p><b>Ставка</b> с каждого игрока — победитель забирает весь банк:</p>
+      <div class="stake-row" id="stake-row">
+        <button class="seat" type="button" data-stake="0">Без ставки</button>
+        <button class="seat" type="button" data-stake="100">100</button>
+        <button class="seat" type="button" data-stake="500">500</button>
+        <button class="seat" type="button" data-stake="1000">1000</button>
+        <button class="seat" type="button" data-stake="2000">2000</button>
+      </div>
+      <p style="margin-top:14px"><b>Создать комнату</b> — каким цветом играете вы:</p>
+      <div class="seat-row" id="create-colors">
+        <button class="seat" type="button" data-create="0">Белыми</button>
+        <button class="seat" type="button" data-create="1">Серыми</button>
+        <button class="seat" type="button" data-create="2">Чёрными</button>
+      </div>
+      <p style="margin-top:14px"><b>Войти по коду</b> друга:</p>
+      <form class="join-row" id="join-form">
+        <label class="sr" for="join-code">Код комнаты</label>
+        <input id="join-code" autocomplete="off" autocapitalize="characters" maxlength="4" placeholder="K7QM" inputmode="text">
+        <button class="btn primary" type="submit">Войти</button>
+      </form>
+    </div>
+    <p class="err" id="online-err" hidden></p>
+    <div class="row"><button class="btn" type="button" data-close>Закрыть</button></div>
+  </div>
+</div>
+
+<div class="menu" id="device" hidden>
+  <div class="menu-box">
+    <h1 class="menu-title">Шашки на&nbsp;троих</h1>
+    <p class="menu-sub">С чего вы играете? Под это подстроится экран.</p>
+    <div class="device-row">
+      <button class="device-btn" type="button" data-device="phone">
+        <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 38h6"/></svg>
+        С телефона<small>Всё в одну колонку, крупные кнопки</small>
+      </button>
+      <button class="device-btn" type="button" data-device="pc">
+        <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="8" width="38" height="25" rx="3"/><path d="M18 41h12M24 33v8"/></svg>
+        С компьютера<small>Большая доска слева, всё остальное справа</small>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Создать игру: все настройки партии на одном экране, на сукне стола -->
+<div class="menu create" id="create" hidden>
+  <div class="menu-box create-box">
+    <div class="create-head">
+      <button class="link-btn back" type="button" id="create-back">← Назад</button>
+      <h2>Создать игру</h2>
+      <span class="coins" id="create-coins" hidden></span>
+    </div>
+    <p class="opt-title">Где играем</p>
+    <div class="seg" data-opt="mode">
+      <button type="button" data-val="local">Один телефон</button>
+      <button type="button" data-val="bots">С компьютером</button>
+      <button type="button" data-val="online">По сети</button>
+    </div>
+    <p class="opt-title">Игроки</p>
+    <div class="seg big-digits" data-opt="players">
+      <button type="button" data-val="2">2</button>
+      <button type="button" data-val="3">3</button>
+    </div>
+    <div class="opt-pair">
+      <div>
+        <p class="opt-title">Доска</p>
+        <div class="seg" data-opt="size">
+          <button type="button" data-val="small">Малая</button>
+          <button type="button" data-val="big">Большая</button>
+        </div>
+      </div>
+      <div>
+        <p class="opt-title">Скорость</p>
+        <div class="seg" data-opt="fast">
+          <button type="button" data-val="0" aria-label="Обычная">▶</button>
+          <button type="button" data-val="1" aria-label="Быстрая">▶▶</button>
+        </div>
+      </div>
+    </div>
+    <p class="opt-note" id="size-note"></p>
+    <p class="opt-title">Режимы игры</p>
+    <div class="modes">
+      <div class="mode-card" data-opt="mustCapture">
+        <button type="button" data-val="1"><b>Бить обязательно</b><small>как в русских шашках</small></button>
+        <button type="button" data-val="0"><b>По желанию</b><small>можно не бить</small></button>
+      </div>
+      <div class="mode-card" data-opt="flyingKing">
+        <button type="button" data-val="1"><b>Дамка дальнобойная</b><small>ходит на любое число клеток</small></button>
+        <button type="button" data-val="0"><b>Дамка короткая</b><small>на одну клетку</small></button>
+      </div>
+      <div class="mode-card" data-opt="backCapture">
+        <button type="button" data-val="1"><b>Бить назад</b><small>простой шашкой тоже</small></button>
+        <button type="button" data-val="0"><b>Только вперёд</b><small>назад бьёт лишь дамка</small></button>
+      </div>
+    </div>
+    <div id="create-online">
+      <p class="opt-title">Ставка с каждого — победитель забирает банк</p>
+      <div class="seg" data-opt="stake">
+        <button type="button" data-val="0">0</button>
+        <button type="button" data-val="100">100</button>
+        <button type="button" data-val="500">500</button>
+        <button type="button" data-val="1000">1K</button>
+        <button type="button" data-val="2000">2K</button>
+      </div>
+      <p class="opt-title">Ваш цвет</p>
+      <div class="seg" data-opt="color">
+        <button type="button" data-val="0">Белые</button>
+        <button type="button" data-val="1">Серые</button>
+        <button type="button" data-val="2">Чёрные</button>
+      </div>
+    </div>
+    <p class="err" id="create-err" hidden></p>
+    <button class="create-go" type="button" id="create-go">Создать ▶</button>
+  </div>
+</div>
+
+<div class="menu" id="menu" hidden>
+  <div class="menu-box">
+    <div class="menu-discs" aria-hidden="true">
+      <svg viewBox="0 0 45 45"><use href="#sym-M" fill="var(--w-fill)" stroke="var(--w-line)" stroke-width="1.8"/></svg>
+      <svg viewBox="0 0 45 45"><use href="#sym-K" fill="var(--g-fill)" stroke="var(--g-line)" stroke-width="1.8"/></svg>
+      <svg viewBox="0 0 45 45"><use href="#sym-M" fill="var(--b-fill)" stroke="var(--b-line)" stroke-width="1.8"/></svg>
+    </div>
+    <h1 class="menu-title">Шашки на&nbsp;троих</h1>
+    <p class="menu-sub">белые · серые · чёрные — на одной шестиугольной доске</p>
+    <span class="coins" id="menu-coins" hidden></span>
+    <div class="menu-list">
+      <button class="menu-btn primary" type="button" id="m-continue" hidden>Продолжить<small id="m-continue-note"></small></button>
+      <button class="menu-btn" type="button" id="m-create">Создать игру<small>Игроки, размер доски, режимы, ставка — и поехали</small></button>
+      <button class="menu-btn" type="button" id="m-online">Войти по коду<small>Друг создал комнату — введите её код</small></button>
+      <div class="menu-row">
+        <button class="menu-btn small" type="button" id="btn-theme">Настройки</button>
+        <button class="menu-btn small" type="button" id="btn-rules">Правила</button>
+      </div>
+      <button class="link-btn" type="button" id="m-device"></button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-theme" hidden>
+  <div class="sheet-box" role="dialog" aria-modal="true" aria-labelledby="theme-title">
+    <h2 id="theme-title">Настройки</h2>
+    <p class="set-head">Оформление</p>
+    <div class="theme-list" id="theme-list"></div>
+    <p class="set-head">Игра</p>
+    <div class="toggles">
+      <label class="toggle"><input type="checkbox" id="set-rotate"> Поворачивать доску к тому, кто ходит</label>
+      <label class="toggle"><input type="checkbox" id="set-hints"> Показывать, куда можно сходить и кого взять</label>
+      <label class="toggle"><input type="checkbox" id="set-fast"> Компьютер ходит быстро</label>
+      <label class="toggle"><input type="checkbox" id="set-anim"> Анимации</label>
+    </div>
+    <div class="row"><button class="btn primary" type="button" data-close>Готово</button></div>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-rules" hidden>
+  <div class="sheet-box" role="dialog" aria-modal="true" aria-labelledby="rules-title">
+    <h2 id="rules-title">Как играть в шашки втроём</h2>
+    <ul>
+      <li>Доска — шестиугольник из трёх половин 8×4. Играют на тёмных клетках. У каждого 12 шашек на трёх первых рядах своей половины.</li>
+      <li>Ходят по кругу: белые, серые, чёрные.</li>
+      <li>Простая шашка ходит на одну клетку вперёд по диагонали. Дойдя до края своей половины, диагональ продолжается у соседа: вертикали a–d ведут к игроку слева, e–h — к игроку справа. Через самый центр доски хода нет.</li>
+      <li>Бить обязательно. Шашка бьёт, перепрыгивая через чужую шашку на свободную клетку за ней, — вперёд и назад. Если после взятия можно бить дальше, бьёт дальше той же шашкой. Бить можно шашки обоих соперников.</li>
+      <li>Шашка, дошедшая до первой линии соперника, становится дамкой. Дамка ходит и бьёт по диагонали на любое расстояние. Если шашка стала дамкой во время взятия, она бьёт дальше уже как дамка.</li>
+      <li>У кого не осталось шашек или некуда ходить — выбывает, его шашки снимаются с доски.</li>
+      <li>Побеждает последний оставшийся. Тридцать кругов одними дамками без взятий — ничья.</li>
+    </ul>
+    <div class="row"><button class="btn primary" type="button" data-close>Понятно</button></div>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-over" hidden>
+  <div class="sheet-box" role="dialog" aria-modal="true" aria-labelledby="over-title">
+    <h2 id="over-title"></h2>
+    <ol class="places" id="over-places"></ol>
+    <div class="row">
+      <button class="btn" type="button" data-close>Посмотреть доску</button>
+      <button class="btn primary" type="button" id="btn-again">Ещё партию</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+// Шашки на троих: правила и компьютерный соперник. Русские шашки на шестиугольной доске.
+// Доска — три половины W×H (у каждого игрока своя), сходятся в центре: маленькая 8×4, большая 10×5.
+// Клетка: половина s (0 белые, 1 серые, 2 чёрные), вертикаль f (0..W−1), горизонталь r (0..H−1,
+// 0 — первая линия хозяина). Номер: s*W*H + r*W + f. Играют на тёмных клетках. Диагональ, дойдя до края
+// половины, продолжается у соседа: левая половина вертикалей ведёт к предыдущему игроку, правая — к следующему
+// (вертикаль f становится W−1−f). Через сам центр хода нет.
+// Настройки партии (cfg): W, H, players (2 или 3), mustCapture, flyingKing, backCapture.
+(function (root) {
+  'use strict';
+
+  const NAMES = ['Белые', 'Серые', 'Чёрные'];
+  const DIAG = [[1, 1], [-1, 1], [1, -1], [-1, -1]];
+  const QUIET_LIMIT = 90; // 30 кругов одними дамками без взятий — ничья
+  const LETTERS = 'abcdefghijkl';
+  const SIZES = { small: { W: 8, H: 4 }, big: { W: 10, H: 5 } };
+
+  function make(cfg0) {
+    const cfg = Object.assign({ W: 8, H: 4, players: 3, mustCapture: true, flyingKing: true, backCapture: true }, cfg0 || {});
+    const W = cfg.W, H = cfg.H, HALF = W / 2, PER = W * H, N = 3 * PER;
+    const ROWS = H - 1; // шашки стоят на всех рядах половины, кроме ближнего к центру
+    const SEATS = cfg.players === 2 ? [0, 1] : [0, 1, 2];
+
+    const idx = (s, f, r) => s * PER + r * W + f;
+    const S = (i) => (i / PER) | 0;
+    const F = (i) => i % W;
+    const R = (i) => ((i % PER) / W) | 0;
+    const isDark = (i) => (F(i) + R(i)) % 2 === 0;
+
+    // Шаг по диагонали; направление возвращается уже в координатах новой половины
+    function step(i, df, dr) {
+      const s = S(i), f = F(i), r = R(i);
+      if (r === H - 1 && dr === 1 && ((f === HALF - 1 && df === 1) || (f === HALF && df === -1))) return null; // в центр — край
+      const nf = f + df, nr = r + dr;
+      if (nf < 0 || nf > W - 1 || nr < 0) return null;
+      if (nr <= H - 1) return { i: idx(s, nf, nr), df, dr };
+      const ns = nf <= HALF - 1 ? (s + 2) % 3 : (s + 1) % 3;
+      return { i: idx(ns, W - 1 - nf, H - 1), df: -df, dr: -dr };
+    }
+
+    function newGame() {
+      const board = new Array(N).fill(null);
+      for (const c of SEATS) {
+        for (let r = 0; r < ROWS; r++) for (let f = 0; f < W; f++) if ((f + r) % 2 === 0) board[idx(c, f, r)] = { c, k: 0 };
+      }
+      const alive = [0, 1, 2].map((c) => SEATS.includes(c));
+      return { cfg, board, turn: 0, alive, out: [], ply: 0, quiet: 0, last: null, winner: -1, draw: false, log: [] };
+    }
+    const clone = (st) => ({
+      cfg: st.cfg || cfg, board: st.board.slice(), turn: st.turn, alive: st.alive.slice(), out: st.out.slice(), ply: st.ply,
+      quiet: st.quiet, last: st.last, winner: st.winner, draw: st.draw, log: st.log.slice(),
+    });
+
+    const fwdOf = (i, c) => (S(i) === c ? 1 : -1);
+    // Дамкой шашка становится на первой линии соперника (вдвоём пустая половина дамку не даёт —
+    // иначе через неё, где никто не мешает, дамкой становились бы за несколько ходов)
+    const crownSq = (i, c) => S(i) !== c && R(i) === 0 && SEATS.includes(S(i));
+
+    // Все цепочки взятий для шашки на from. Взятые шашки остаются на доске до конца хода:
+    // их нельзя бить второй раз и через них нельзя прыгать («турецкий удар» запрещён)
+    function captures(b, from) {
+      const p = b[from];
+      const res = [];
+      const dfs = (pos, king, caps, path, crowned) => {
+        let found = false;
+        for (const [df0, dr0] of DIAG) {
+          // Простая шашка бьёт назад, только если это разрешено в настройках
+          if (!king && !cfg.backCapture && dr0 !== fwdOf(pos, p.c)) continue;
+          if (!king || !cfg.flyingKing) {
+            const a = step(pos, df0, dr0);
+            if (!a) continue;
+            const q = b[a.i];
+            if (!q || q.c === p.c || caps.includes(a.i)) continue;
+            const l = step(a.i, a.df, a.dr);
+            if (!l || (b[l.i] && l.i !== from)) continue;
+            found = true;
+            const nowKing = king || crownSq(l.i, p.c);
+            dfs(l.i, nowKing, caps.concat(a.i), path.concat(l.i), crowned || (!king && nowKing));
+          } else {
+            let cur = pos, df = df0, dr = dr0, enemy = -1;
+            for (let n = 0; n < 60; n++) {
+              const st = step(cur, df, dr);
+              if (!st) break;
+              cur = st.i; df = st.df; dr = st.dr;
+              const q = cur === from ? null : b[cur];
+              if (enemy < 0) {
+                if (!q) continue;
+                if (q.c === p.c || caps.includes(cur)) break;
+                enemy = cur;
+                continue;
+              }
+              if (q) break;
+              found = true;
+              dfs(cur, true, caps.concat(enemy), path.concat(cur), crowned);
+            }
+          }
+        }
+        if (!found && caps.length) res.push({ from, to: pos, path, caps, crown: crowned && !p.k });
+      };
+      dfs(from, !!p.k, [], [], false);
+      return res;
+    }
+
+    function quietMoves(b, from) {
+      const p = b[from], out = [];
+      if (p.k) {
+        for (const [df0, dr0] of DIAG) {
+          let cur = from, df = df0, dr = dr0;
+          for (let n = 0; n < (cfg.flyingKing ? 60 : 1); n++) {
+            const st = step(cur, df, dr);
+            if (!st || b[st.i]) break;
+            cur = st.i; df = st.df; dr = st.dr;
+            out.push({ from, to: cur, path: [cur], caps: [], crown: false });
+          }
+        }
+      } else {
+        const fwd = fwdOf(from, p.c);
+        for (const df of [-1, 1]) {
+          const st = step(from, df, fwd);
+          if (st && !b[st.i]) out.push({ from, to: st.i, path: [st.i], caps: [], crown: crownSq(st.i, p.c) });
+        }
+      }
+      return out;
+    }
+
+    // Ходы игрока. Если «бить обязательно» и есть взятие — только взятия
+    function legalMoves(st, c) {
+      const caps = [], quiet = [];
+      for (let i = 0; i < N; i++) {
+        const p = st.board[i];
+        if (!p || p.c !== c) continue;
+        caps.push(...captures(st.board, i));
+        if (!cfg.mustCapture || !caps.length) quiet.push(...quietMoves(st.board, i));
+      }
+      if (!cfg.mustCapture) return caps.concat(quiet);
+      return caps.length ? caps : quiet;
+    }
+
+    const nextAlive = (st, c) => { for (let k = 1; k <= 3; k++) { const x = (c + k) % 3; if (st.alive[x]) return x; } return c; };
+    const piecesOf = (st, c) => st.board.reduce((n, p) => n + (p && p.c === c ? 1 : 0), 0);
+    function eliminate(st, c, reason, by) {
+      st.alive[c] = false;
+      st.out.push({ c, reason, by });
+      for (let i = 0; i < N; i++) if (st.board[i] && st.board[i].c === c) st.board[i] = null;
+    }
+    function advance(st, from) {
+      let c = from;
+      for (let g = 0; g < 4; g++) {
+        if (st.alive.filter(Boolean).length <= 1) break;
+        c = nextAlive(st, c);
+        if (legalMoves(st, c).length) break;
+        eliminate(st, c, 'blocked', -1);
+      }
+      st.turn = c;
+      const left = [0, 1, 2].filter((x) => st.alive[x]);
+      if (left.length === 1) st.winner = left[0];
+      else if (left.length > 1 && st.quiet >= QUIET_LIMIT) st.draw = true;
+    }
+
+    function play(st0, m) {
+      const st = clone(st0);
+      const p = st.board[m.from];
+      st.board[m.from] = null;
+      const taken = [];
+      for (const i of m.caps) { taken.push(st.board[i].c); st.board[i] = null; }
+      st.board[m.to] = { c: p.c, k: p.k || m.crown ? 1 : 0 };
+      st.ply++;
+      st.quiet = m.caps.length || !p.k ? 0 : st.quiet + 1;
+      st.last = { from: m.from, to: m.to, c: p.c, path: m.path, caps: m.caps };
+      st.log.push({ c: p.c, k: p.k, from: m.from, to: m.to, n: m.caps.length, crown: !!m.crown });
+      // Взяли последнюю шашку соперника — он выбывает сразу
+      for (const c of new Set(taken)) if (st.alive[c] && piecesOf(st, c) === 0) eliminate(st, c, 'nopieces', p.c);
+      advance(st, p.c);
+      return st;
+    }
+
+    function resign(st0) {
+      const st = clone(st0);
+      const c = st.turn;
+      eliminate(st, c, 'resign', -1);
+      advance(st, c);
+      return st;
+    }
+
+    const cellName = (i) => LETTERS[F(i)] + (R(i) + 1);
+
+    // ---------- компьютер ----------
+    const worth = (p) => (p.k ? 25 : 10);
+    // Сколько самое большее заберут соперники одним ходом в этой позиции
+    function threat(st, c) {
+      let worst = 0;
+      for (const o of [0, 1, 2]) {
+        if (o === c || !st.alive[o]) continue;
+        for (let i = 0; i < N; i++) {
+          const p = st.board[i];
+          if (!p || p.c !== o) continue;
+          for (const m of captures(st.board, i)) {
+            let v = 0;
+            for (const x of m.caps) if (st.board[x].c === c) v += worth(st.board[x]);
+            if (v > worst) worst = v;
+          }
+        }
+      }
+      return worst;
+    }
+    function botMove(st, rnd = Math.random) {
+      const c = st.turn;
+      const moves = legalMoves(st, c);
+      if (!moves.length) return null;
+      let best = null, bestScore = -Infinity;
+      for (const m of moves) {
+        let score = 0;
+        for (const x of m.caps) score += worth(st.board[x]);
+        if (m.crown) score += 18;
+        const b = st.board.slice();
+        const p = b[m.from];
+        b[m.from] = null;
+        for (const x of m.caps) b[x] = null;
+        b[m.to] = { c, k: p.k || m.crown ? 1 : 0 };
+        score -= threat({ board: b, alive: st.alive }, c) * 0.9;
+        // Что смогу взять следующим ходом — дамки идут охотиться, а не ходят туда-сюда
+        let next = 0;
+        for (let i = 0; i < N; i++) if (b[i] && b[i].c === c) for (const n of captures(b, i)) next = Math.max(next, n.caps.reduce((s, x) => s + worth(b[x]), 0));
+        score += next * 0.35;
+        if (!p.k) score += S(m.to) !== c ? 2 : 1; // вперёд, к чужим линиям
+        score += rnd() * 3;
+        if (score > bestScore) { bestScore = score; best = m; }
+      }
+      return best;
+    }
+
+    return { NAMES, cfg, W, H, N, idx, S, F, R, isDark, step, newGame, legalMoves, play, resign, botMove, cellName, piecesOf };
+  }
+
+  // Готовый набор правил по умолчанию (маленькая доска, трое) + конструктор для других настроек
+  const api = Object.assign(make(), { make, SIZES });
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Checkers3 = api;
+})(this);
+
+</script>
+<script>
+(function () {
+  'use strict';
+  // Правила текущей партии (размер доски, число игроков, режимы) — меняются при создании новой игры
+  let Ch = window.Checkers3;
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const KEY = 'checkers3-v1';
+  const NAMES = Ch.NAMES;
+  const GEN = ['белых', 'серых', 'чёрных'];
+  const DAT = ['белым', 'серым', 'чёрным'];
+  const FILL = ['var(--w-fill)', 'var(--g-fill)', 'var(--b-fill)'];
+  const LINE = ['var(--w-line)', 'var(--g-line)', 'var(--b-line)'];
+  const tOf = (p) => (p.k ? 'K' : 'M'); // дамка или простая шашка
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- геометрия доски ----------
+  const RAD = 100;
+  const V = (k) => { const a = (240 + 60 * k) * Math.PI / 180; return [RAD * Math.cos(a), RAD * Math.sin(a)]; };
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const M = (k) => mid(V(k), V(k + 1));
+  const O = [0, 0];
+  const mix = (p, q, r, s, u, v) => [
+    (1 - u) * (1 - v) * p[0] + u * (1 - v) * q[0] + (1 - u) * v * r[0] + u * v * s[0],
+    (1 - u) * (1 - v) * p[1] + u * (1 - v) * q[1] + (1 - u) * v * r[1] + u * v * s[1],
+  ];
+  // Точка на половине s: x — вертикали (0..W), y — горизонтали (0..H). В координатах SVG (y вниз)
+  function at(s, x, y) {
+    const hw = Ch.W / 2;
+    const p = x <= hw
+      ? mix(V(2 * s), M(2 * s), M(2 * s - 1), O, x / hw, y / Ch.H)
+      : mix(M(2 * s), V(2 * s + 1), O, M(2 * s + 1), (x - hw) / hw, y / Ch.H);
+    return [p[0], -p[1]];
+  }
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  const CELL = [];
+  function buildCells() {
+    CELL.length = 0;
+    for (let i = 0; i < Ch.N; i++) {
+      const s = Ch.S(i), f = Ch.F(i), r = Ch.R(i);
+      const poly = [at(s, f, r), at(s, f + 1, r), at(s, f + 1, r + 1), at(s, f, r + 1)];
+      const c = at(s, f + 0.5, r + 0.5);
+      const w = dist(at(s, f, r + 0.5), at(s, f + 1, r + 0.5));
+      const h = dist(at(s, f + 0.5, r), at(s, f + 0.5, r + 1));
+      CELL.push({ poly, c, size: Math.min(w, h) });
+    }
+  }
+
+  // ---------- состояние ----------
+  let game = Ch.newGame();
+  let history = [];
+  let seats = ['human', 'human', 'human'];
+  let rotateOn = true;
+  let view = 0; // чья сторона внизу
+  let rotDeg = 0;
+  let legal = [];
+  let selected = -1;
+  let busy = false;
+  let botTimer = 0;
+  let els = new Array(Ch.N).fill(null);
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify({ game, history: history.slice(-240), seats, rotateOn })); } catch (e) { /* без сохранения */ }
+  }
+  function load(data) {
+    if (!data || !data.game || !Array.isArray(data.game.board)) return false;
+    const R2 = window.Checkers3.make(data.game.cfg || {});
+    if (data.game.board.length !== R2.N) return false;
+    Ch = R2;
+    game = data.game;
+    history = Array.isArray(data.history) ? data.history : [];
+    if (Array.isArray(data.seats) && data.seats.length === 3) seats = data.seats;
+    rotateOn = data.rotateOn !== false;
+    return true;
+  }
+
+  // ---------- рисование ----------
+  const el = (tag, attrs, parent) => {
+    const e = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  };
+  const pts = (poly) => poly.map((p) => p[0].toFixed(2) + ',' + p[1].toFixed(2)).join(' ');
+
+  function buildBoard() {
+    buildCells();
+    for (const id of ['cells', 'labels', 'marks', 'pieces']) $(id).textContent = '';
+    els = new Array(Ch.N).fill(null);
+    const rim = [];
+    for (let k = 0; k < 6; k++) { const v = V(k); const a = (240 + 60 * k) * Math.PI / 180; rim.push([v[0] + 9 * Math.cos(a), -(v[1] + 9 * Math.sin(a))]); }
+    $('rim').setAttribute('points', pts(rim));
+    const cells = $('cells');
+    for (let i = 0; i < Ch.N; i++) {
+      const light = (Ch.F(i) + Ch.R(i)) % 2 === 1;
+      el('polygon', { points: pts(CELL[i].poly), class: 'cell ' + (light ? 'l' : 'd'), 'data-i': i }, cells);
+    }
+    // Буквы вдоль первой линии каждого игрока и цифры по бокам — цветом хозяина половины
+    // Подписи стоят на деревянной рамке: точка края доски + сдвиг наружу по нормали этого края
+    const labels = $('labels');
+    const normal = (k) => { const m = M(k); const l = Math.hypot(m[0], m[1]); return [m[0] / l, -m[1] / l]; };
+    const out = (p, n) => [p[0] + n[0] * 4.4, p[1] + n[1] * 4.4];
+    for (let s = 0; s < 3; s++) {
+      const tint = s === 2 ? 'var(--rim-ink)' : s === 1 ? '#c7ced6' : '#fbf6ea';
+      for (let f = 0; f < Ch.W; f++) addLabel(labels, out(at(s, f + 0.5, 0), normal(2 * s)), 'abcdefghijkl'[f], tint);
+      for (let r = 0; r < Ch.H; r++) {
+        addLabel(labels, out(at(s, 0, r + 0.5), normal(2 * s - 1)), String(r + 1), tint);
+        addLabel(labels, out(at(s, Ch.W, r + 0.5), normal(2 * s + 1)), String(r + 1), tint);
+      }
+    }
+  }
+  function addLabel(parent, p, text, fill) {
+    const t = el('text', { class: 'lbl', fill, x: 0, y: 0 }, parent);
+    t.textContent = text;
+    t.dataset.x = p[0];
+    t.dataset.y = p[1];
+  }
+
+  function placeAll() {
+    $('world').style.transform = `rotate(${rotDeg}deg)`;
+    for (const t of $('labels').children) t.style.transform = `translate(${t.dataset.x}px, ${t.dataset.y}px) rotate(${-rotDeg}deg)`;
+    for (let i = 0; i < Ch.N; i++) if (els[i]) place(els[i], i);
+  }
+  function place(e, i) {
+    const k = (CELL[i].size * 0.95) / 45;
+    e.g.style.transform = `translate(${CELL[i].c[0]}px, ${CELL[i].c[1]}px) rotate(${-rotDeg}deg) scale(${k.toFixed(3)})`;
+  }
+  function makePiece(i, p) {
+    const g = el('g', { class: 'pc' }, $('pieces'));
+    const use = el('use', { href: '#sym-' + tOf(p), x: -22.5, y: -22.5, width: 45, height: 45, fill: FILL[p.c], stroke: LINE[p.c] }, g);
+    const e = { g, use, t: tOf(p), c: p.c };
+    els[i] = e;
+    place(e, i);
+    return e;
+  }
+  function dropEl(e) {
+    e.g.classList.add('gone');
+    setTimeout(() => e.g.remove(), 300);
+  }
+  // Привести фигуры на экране к позиции (после хода, отмены, загрузки)
+  function sync() {
+    for (let i = 0; i < Ch.N; i++) {
+      const p = game.board[i], e = els[i];
+      if (!p && e) { dropEl(e); els[i] = null; }
+      else if (p && !e) makePiece(i, p);
+      else if (p && e && (e.t !== tOf(p) || e.c !== p.c)) {
+        e.use.setAttribute('href', '#sym-' + tOf(p));
+        e.use.setAttribute('fill', FILL[p.c]);
+        e.use.setAttribute('stroke', LINE[p.c]);
+        e.t = tOf(p); e.c = p.c;
+      }
+    }
+  }
+  // Шашка прыгает по клеткам дорожки по очереди
+  function hop(from, path) {
+    const e = els[from];
+    if (!e) return;
+    els[from] = null;
+    const to = path[path.length - 1];
+    if (els[to] && els[to] !== e) dropEl(els[to]);
+    els[to] = e;
+    document.documentElement.style.setProperty('--dur', path.length > 1 ? '0.2s' : '0.3s');
+    path.forEach((sq, k) => setTimeout(() => place(e, sq), k * 230));
+  }
+  function moveEl(from, to) {
+    const e = els[from];
+    if (!e) return;
+    if (els[to]) dropEl(els[to]);
+    els[from] = null;
+    els[to] = e;
+    place(e, to);
+  }
+
+  function drawMarks() {
+    const g = $('marks');
+    g.textContent = '';
+    // Последний ход — вся дорожка прыжков
+    if (game.last) for (const i of [game.last.from].concat(game.last.path || [game.last.to])) el('polygon', { points: pts(CELL[i].poly), class: 'm-last' }, g);
+    if (selected >= 0) {
+      el('polygon', { points: pts(CELL[selected].poly), class: 'm-sel' }, g);
+      const hit = new Set();
+      for (const m of legal) {
+        if (m.from !== selected) continue;
+        const c = CELL[m.to];
+        if (!settings.hints) continue; // подсказки выключены в настройках
+        el('circle', { cx: c.c[0], cy: c.c[1], r: c.size * 0.17, class: 'm-dot' }, g);
+        for (const x of m.caps) hit.add(x);
+      }
+      // Кольца — шашки, которые будут взяты
+      for (const x of hit) el('circle', { cx: CELL[x].c[0], cy: CELL[x].c[1], r: CELL[x].size * 0.46, class: 'm-hit' }, g);
+    }
+  }
+
+  function kingIcon(c) {
+    return `<svg viewBox="0 0 45 45" aria-hidden="true"><use href="#sym-M" fill="${FILL[c]}" stroke="${LINE[c]}" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+  }
+  const over = () => game.winner >= 0 || game.draw;
+  function capturedBy(c) {
+    let n = 0;
+    for (const e of game.log) if (e.c === c) n += e.n || 0;
+    return Math.round(n);
+  }
+
+  // Игроки за столом, как в карточных играх: соперники сверху — каждый со стороны своей половины доски
+  // (слева тот, к кому ведут вертикали a–d, справа — e–h), вы — внизу
+  function renderPlayers() {
+    const top = $('players');
+    const me = $('me-slot');
+    top.textContent = '';
+    me.textContent = '';
+    for (const c of [(view + 2) % 3, (view + 1) % 3]) if (Ch.cfg.players !== 2 || c !== 2) top.appendChild(playerTile(c));
+    me.appendChild(playerTile(view));
+  }
+  const PERSON = '<svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="24" r="12" fill="currentColor"/><path d="M10 62c1-14 10-22 22-22s21 8 22 22z" fill="currentColor"/></svg>';
+  const ROBOT = '<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="14" y="18" width="36" height="30" rx="8" fill="currentColor"/><circle cx="25" cy="32" r="4.5" fill="#fff"/><circle cx="39" cy="32" r="4.5" fill="#fff"/><path d="M32 10v8M24 42h16" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="9" r="3.5" fill="currentColor"/></svg>';
+  const TILE_BG = ['#efe9dc', '#a3adb8', '#3a332d'];
+  const TILE_FG = ['#bfb4a0', '#e6eaee', '#6e655c'];
+  function playerTile(c) {
+    const out = !game.alive[c];
+    const k = kind(c);
+    const id = mode === 'online' ? room.seats[c] : null;
+    const tile = document.createElement('div');
+    tile.className = 'tile' + (game.turn === c && !over() ? ' turn' : '') + (out ? ' out' : '') + (game.winner === c ? ' won' : '');
+    tile.dataset.seat = c;
+    const face = document.createElement('div');
+    face.className = 'face';
+    face.style.background = TILE_BG[c];
+    face.style.color = TILE_FG[c];
+    face.style.borderColor = FILL[c];
+    if (id && avatars[id] && k !== 'bot') {
+      const img = document.createElement('img');
+      img.src = avatars[id];
+      img.alt = '';
+      face.appendChild(img);
+    } else face.insertAdjacentHTML('beforeend', k === 'bot' ? ROBOT : PERSON);
+    const nm = document.createElement('span');
+    nm.className = 'nm';
+    nm.textContent = k === 'bot' ? 'Компьютер' : (id && names[id]) || NAMES[c];
+    face.appendChild(nm);
+    // Значок: сколько шашек осталось, кружок — цвет игрока
+    const badge = document.createElement('span');
+    badge.className = 'badge';
+    badge.innerHTML = kingIcon(c);
+    badge.append(String(Ch.piecesOf(game, c)));
+    face.appendChild(badge);
+    tile.appendChild(face);
+    const sub = document.createElement('span');
+    sub.className = 'sub';
+    let state;
+    if (game.winner === c) state = 'Победа!';
+    else if (out) state = 'Выбыли';
+    else if (game.turn === c && !over()) state = k === 'bot' ? 'Думает…' : k === 'empty' ? 'Ждём игрока' : 'Ходит';
+    else state = NAMES[c] + (capturedBy(c) ? ` · взяли ${capturedBy(c)}` : '');
+    sub.textContent = state;
+    tile.appendChild(sub);
+    // Монеты игрока (по сети — у каждого свои)
+    const money = id ? (id === myId ? coins : wallets[id]) : null;
+    if (money !== null && money !== undefined) {
+      const m = document.createElement('span');
+      m.className = 'coins mini';
+      m.textContent = Number(money).toLocaleString('ru-RU');
+      tile.appendChild(m);
+    }
+    tile.appendChild(mode === 'online' ? onlineSeat(c) : localSeat(c));
+    return tile;
+  }
+  function localSeat(c) {
+    const seat = document.createElement('button');
+    seat.type = 'button';
+    seat.className = 'seat';
+    seat.textContent = seats[c] === 'bot' ? '→ человек' : '→ компьютер';
+    seat.title = seats[c] === 'bot' ? 'Отдать этот цвет человеку' : 'Отдать этот цвет компьютеру';
+    seat.addEventListener('click', () => {
+      seats[c] = seats[c] === 'bot' ? 'human' : 'bot';
+      save();
+      refresh();
+      maybeBot();
+    });
+    return seat;
+  }
+  // По сети: кто сидит за цветом. Свободное место можно занять, хозяин комнаты может отдать его компьютеру
+  function onlineSeat(c) {
+    const seat = document.createElement('button');
+    seat.type = 'button';
+    seat.className = 'seat';
+    const k = kind(c);
+    const amHost = room.host === myId;
+    const mine = room.seats.indexOf(myId);
+    if (k === 'human') { seat.textContent = 'Это вы'; seat.setAttribute('aria-pressed', 'true'); seat.disabled = true; }
+    else if (k === 'remote') { seat.textContent = names[room.seats[c]] || 'Игрок'; seat.disabled = true; }
+    else if (k === 'bot') {
+      seat.textContent = 'Компьютер';
+      seat.setAttribute('aria-pressed', 'true');
+      if (mine < 0) seat.addEventListener('click', () => takeSeat(c));
+      else if (amHost) seat.addEventListener('click', () => setBot(c, false));
+      else seat.disabled = true;
+      if (mine < 0) seat.textContent = 'Компьютер — занять';
+    } else {
+      seat.textContent = mine < 0 ? 'Занять место' : amHost ? 'Свободно — дать компьютеру' : 'Свободно';
+      if (mine < 0) seat.addEventListener('click', () => takeSeat(c));
+      else if (amHost) seat.addEventListener('click', () => setBot(c, true));
+      else seat.disabled = true;
+    }
+    return seat;
+  }
+
+  function renderStatus() {
+    let main, sub = '';
+    if (game.winner >= 0) main = `Победили ${NAMES[game.winner].toLowerCase()}!`;
+    else if (game.draw) main = 'Ничья';
+    else {
+      main = `Ход ${GEN[game.turn]}`;
+      if (legal.length && legal[0].caps.length && kind(game.turn) === 'human') main += ' — бить обязательно!';
+      const k = kind(game.turn);
+      if (k === 'bot') sub = 'Компьютер думает…';
+      else if (k === 'empty') sub = 'За этим цветом никого нет — пусть друг займёт место';
+      else if (k === 'remote') sub = `Ходит ${names[room.seats[game.turn]] || 'друг'}`;
+      else if (mode === 'online') sub = 'Ваш ход';
+      else if (selected < 0 && !game.log.length) sub = 'Нажмите на свою шашку, потом на клетку';
+      if (k !== 'human' && game.last) sub = describe(game.log[game.log.length - 1]) + ' · ' + sub;
+    }
+    if (game.last && !sub) {
+      const e = game.log[game.log.length - 1];
+      sub = describe(e);
+    }
+    $('status').innerHTML = main + (sub ? `<small>${sub}</small>` : '');
+  }
+  // Клетка для текста: на своей половине — просто «e4», на чужой — «e4 у серых»
+  const where = (i, c) => Ch.cellName(i) + (Ch.S(i) !== c ? ' у ' + GEN[Ch.S(i)] : '');
+  function moveText(e) {
+    return `${e.k ? 'дамка' : 'шашка'} ${where(e.from, e.c)} → ${where(e.to, e.c)}${e.n ? ', взято ' + e.n : ''}${e.crown ? ', стала дамкой!' : ''}`;
+  }
+  function describe(e) {
+    return e ? `${NAMES[e.c]}: ${moveText(e)}` : '';
+  }
+  function renderLog() {
+    const ol = $('log');
+    ol.textContent = '';
+    for (const e of game.log) {
+      const li = document.createElement('li');
+      const b = document.createElement('b');
+      b.textContent = NAMES[e.c];
+      li.append(b, ' ' + moveText(e));
+      ol.appendChild(li);
+    }
+    ol.scrollTop = ol.scrollHeight;
+  }
+
+  function refresh() {
+    legal = over() ? [] : Ch.legalMoves(game, game.turn);
+    renderPlayers();
+    renderStatus();
+    renderLog();
+    drawMarks();
+    $('btn-undo').disabled = mode === 'online' || !history.some((h) => seats[h.turn] === 'human') || busy;
+    $('btn-resign').disabled = over() || kind(game.turn) !== 'human';
+    $('btn-rotate').setAttribute('aria-pressed', String(rotateOn));
+    $('btn-rotate').hidden = mode === 'online';
+    $('btn-undo').hidden = mode === 'online';
+    renderRoom();
+  }
+
+  // Кто сидит за цветом: human — можно ходить с этого телефона, bot, remote — друг с другого телефона, empty
+  function kind(c) {
+    if (mode !== 'online') return seats[c];
+    if (room.bots[c]) return 'bot';
+    if (!room.seats[c]) return 'empty';
+    return room.seats[c] === myId ? 'human' : 'remote';
+  }
+
+  // Доска поворачивается к тому человеку, кто ходит (по сети — всегда к вам); у компьютеров — остаётся как была
+  function aimView(animate) {
+    let want = view;
+    if (mode === 'online') want = Math.max(0, room.seats.indexOf(myId));
+    else if (rotateOn && !over() && seats[game.turn] === 'human') want = game.turn;
+    else if (!rotateOn) want = seats.indexOf('human') >= 0 ? seats.indexOf('human') : 0;
+    if (want === view && !animate) return;
+    view = want;
+    let target = 120 * view;
+    while (target - rotDeg > 180) target -= 360;
+    while (target - rotDeg < -180) target += 360;
+    if (target === rotDeg) return;
+    rotDeg = target;
+    document.documentElement.style.setProperty('--dur', animate ? '0.7s' : '0s');
+    placeAll();
+  }
+
+  // ---------- ходы ----------
+  let toastTimer = 0;
+  function toast(text) {
+    const t = $('toast');
+    t.textContent = text;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, 2600);
+  }
+  function announce(prev) {
+    const news = game.out.slice(prev.out.length);
+    for (const o of news) {
+      if (o.reason === 'nopieces') toast(`У ${GEN[o.c]} не осталось шашек — выбывают`);
+      else if (o.reason === 'blocked') toast(`${DAT[o.c][0].toUpperCase() + DAT[o.c].slice(1)} некуда ходить — выбывают`);
+      else if (o.reason === 'resign') toast(`${NAMES[o.c]} сдались`);
+    }
+    const e = game.log[game.log.length - 1];
+    if (!news.length && e && e.crown && game.log.length > prev.log.length) toast(`${NAMES[e.c]}: шашка стала дамкой!`);
+  }
+
+  function doMove(m) {
+    clearTimeout(botTimer);
+    const prev = game;
+    history.push(prev);
+    game = Ch.play(prev, m);
+    selected = -1;
+    hop(m.from, m.path || [m.to]);
+    sync();
+    announce(prev);
+    if (mode === 'online') pushGame();
+    else save();
+    refresh();
+    afterMove();
+  }
+
+  function afterMove() {
+    if (over()) {
+      setTimeout(showOver, 700);
+      return;
+    }
+    setTimeout(() => { aimView(true); maybeBot(); }, 320);
+  }
+
+  function maybeBot() {
+    clearTimeout(botTimer);
+    busy = false;
+    // По сети за компьютеров ходит только телефон хозяина комнаты
+    // Пока открыто главное меню, компьютеры ждут
+    if (over() || !$('menu').hidden || !$('device').hidden || kind(game.turn) !== 'bot' || (mode === 'online' && room.host !== myId)) { refresh(); return; }
+    busy = true;
+    refresh();
+    botTimer = setTimeout(() => {
+      busy = false;
+      const m = Ch.botMove(game);
+      if (m) doMove(m);
+    }, settings.fast ? 220 : 650);
+  }
+
+  function onCell(i) {
+    if (busy || over() || kind(game.turn) !== 'human' || pushing) return;
+    const moves = selected >= 0 ? legal.filter((m) => m.from === selected && m.to === i) : [];
+    if (moves.length) {
+      // В одну клетку можно прийти разными цепочками — берём ту, где взято больше
+      doMove(moves.reduce((a, b) => (b.caps.length > a.caps.length ? b : a)));
+      return;
+    }
+    const p = game.board[i];
+    selected = p && p.c === game.turn && legal.some((m) => m.from === i) ? (selected === i ? -1 : i) : -1;
+    drawMarks();
+    renderStatus();
+  }
+
+  function showOver() {
+    $('over-title').textContent = game.winner >= 0 ? `Победили ${NAMES[game.winner].toLowerCase()}!` : 'Ничья';
+    const ol = $('over-places');
+    ol.textContent = '';
+    const reason = { nopieces: 'остались без шашек', blocked: 'некуда ходить', resign: 'сдались' };
+    const order = [];
+    if (game.winner >= 0) order.push([game.winner, 'победа']);
+    else for (let c = 0; c < 3; c++) if (game.alive[c]) order.push([c, 'ничья']);
+    for (let k = game.out.length - 1; k >= 0; k--) order.push([game.out[k].c, reason[game.out[k].reason]]);
+    for (const [c, why] of order) {
+      const li = document.createElement('li');
+      li.textContent = `${NAMES[c]} — ${why}`;
+      ol.appendChild(li);
+    }
+    openSheet('sheet-over');
+  }
+
+  // ---------- окна ----------
+  function openSheet(id) {
+    closeSheets();
+    $(id).hidden = false;
+    const f = $(id).querySelector('button');
+    if (f) f.focus();
+  }
+  function closeSheets() { for (const s of document.querySelectorAll('.sheet')) s.hidden = true; }
+  for (const b of document.querySelectorAll('[data-close]')) b.addEventListener('click', closeSheets);
+  for (const s of document.querySelectorAll('.sheet')) s.addEventListener('click', (e) => { if (e.target === s) closeSheets(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheets(); });
+
+  let draftSeats = seats.slice();
+  function renderDraft() {
+    const row = $('new-seats');
+    row.textContent = '';
+    for (let c = 0; c < 3; c++) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'seat';
+      b.setAttribute('aria-pressed', draftSeats[c] === 'bot' ? 'true' : 'false');
+      b.textContent = `${NAMES[c]}: ${draftSeats[c] === 'bot' ? 'компьютер' : 'человек'}`;
+      b.addEventListener('click', () => { draftSeats[c] = draftSeats[c] === 'bot' ? 'human' : 'bot'; renderDraft(); });
+      row.appendChild(b);
+    }
+  }
+  function startNew(s, cfg) {
+    clearTimeout(botTimer);
+    busy = false;
+    seats = s.slice();
+    if (cfg) Ch = window.Checkers3.make(cfg);
+    game = Ch.newGame();
+    history = [];
+    selected = -1;
+    closeSheets();
+    buildBoard();
+    placeAll();
+    sync();
+    aimView(true);
+    if (!rotateOn) aimView(false);
+    save();
+    refresh();
+    maybeBot();
+  }
+  function newGameClick() {
+    if (mode === 'online') {
+      if (room.host === myId) {
+        closeSheets();
+        const prev = game;
+        game = Ch.newGame();
+        selected = -1;
+        sync();
+        announce(prev);
+        // Новая партия — новый круг ставок: каждый за столом снова кладёт ставку в банк
+        room.round += 1;
+        pushGame({ round: room.round });
+        refresh();
+        maybeBot();
+      } else toast('Новую партию в комнате начинает её хозяин');
+      return;
+    }
+    draftSeats = seats.slice();
+    renderDraft();
+    openSheet('sheet-new');
+  }
+  $('btn-new').addEventListener('click', newGameClick);
+  $('btn-again').addEventListener('click', newGameClick);
+  for (const b of document.querySelectorAll('[data-preset]')) {
+    b.addEventListener('click', () => startNew(b.dataset.preset.split('').map((x) => (x === 'b' ? 'bot' : 'human'))));
+  }
+  $('btn-start').addEventListener('click', () => startNew(draftSeats));
+  $('btn-rules').addEventListener('click', () => openSheet('sheet-rules'));
+  $('btn-rotate').addEventListener('click', () => {
+    rotateOn = !rotateOn;
+    save();
+    aimView(true);
+    refresh();
+  });
+  $('btn-undo').addEventListener('click', () => {
+    if (!history.length) return;
+    clearTimeout(botTimer);
+    busy = false;
+    // Откатываем до хода человека (ходы компьютеров после него — тоже)
+    do { game = history.pop(); } while (history.length && seats[game.turn] !== 'human');
+    selected = -1;
+    document.documentElement.style.setProperty('--dur', '0.25s');
+    sync();
+    for (let i = 0; i < Ch.N; i++) if (els[i]) place(els[i], i);
+    save();
+    aimView(true);
+    refresh();
+    maybeBot();
+  });
+  let resignArmed = 0;
+  $('btn-resign').addEventListener('click', () => {
+    const b = $('btn-resign');
+    if (!resignArmed) {
+      b.textContent = 'Точно сдаться?';
+      resignArmed = setTimeout(() => { b.textContent = 'Сдаться'; resignArmed = 0; }, 3000);
+      return;
+    }
+    clearTimeout(resignArmed);
+    resignArmed = 0;
+    b.textContent = 'Сдаться';
+    const prev = game;
+    history.push(prev);
+    game = Ch.resign(prev);
+    selected = -1;
+    sync();
+    announce(prev);
+    if (mode === 'online') pushGame();
+    else save();
+    refresh();
+    afterMove();
+  });
+  $('board').addEventListener('click', (e) => {
+    const c = e.target.closest('[data-i]');
+    if (c) onCell(+c.dataset.i);
+  });
+
+  // ---------- игра по сети: комната по коду ----------
+  // Партия комнаты — один документ games/<КОД> в общем хранилище страницы:
+  // {game, seats: [id игрока | null ×3], bots: [×3], host, rev}. Ходит тот, чей цвет;
+  // за компьютеры ходит телефон хозяина комнаты. Каждый ход — запись, остальные видят её сразу.
+  // ---------- темы оформления: у каждой основа (светлая/тёмная) и свои цвета доски ----------
+  const THEME_KEY = 'checkers3-theme';
+  const THEMES = [
+    { id: 'auto', name: 'Авто', note: 'как в телефоне', base: null, cells: ['#e4d3ae', '#a67b52'] },
+    { id: 'light', name: 'Светлая', base: 'light', cells: ['#e4d3ae', '#a67b52'] },
+    { id: 'dark', name: 'Тёмная', base: 'dark', cells: ['#e4d3ae', '#a67b52'] },
+    { id: 'forest', name: 'Лес', base: 'light', cells: ['#e2ebc6', '#6e8f4d'] },
+    { id: 'ocean', name: 'Океан', base: 'dark', cells: ['#d3e8f1', '#3f7fa3'] },
+    { id: 'marble', name: 'Розовый мрамор', base: 'light', cells: ['#f3efe9', '#bf9a86'] },
+    { id: 'neon', name: 'Неон', base: 'dark', cells: ['#3a3f78', '#1d2148'] },
+    { id: 'candy', name: 'Конфета', base: 'light', cells: ['#ffe4ef', '#ea8db1'] },
+  ];
+  let theme = 'auto';
+  try { theme = localStorage.getItem(THEME_KEY) || 'auto'; } catch (e) { theme = 'auto'; }
+  function applyTheme() {
+    const t = THEMES.find((x) => x.id === theme) || THEMES[0];
+    const root = document.documentElement;
+    if (t.base) root.setAttribute('data-theme', t.base); else root.removeAttribute('data-theme');
+    if (['light', 'dark', 'auto'].includes(t.id)) root.removeAttribute('data-skin'); else root.setAttribute('data-skin', t.id);
+  }
+  function openThemes() {
+    const box = $('theme-list');
+    box.textContent = '';
+    for (const t of THEMES) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'theme-card';
+      b.setAttribute('aria-pressed', String(t.id === theme));
+      const sw = document.createElement('span');
+      sw.className = 'swatch';
+      sw.style.background = `linear-gradient(135deg, ${t.cells[0]} 0 50%, ${t.cells[1]} 50% 100%)`;
+      const nm = document.createElement('span');
+      nm.textContent = t.name + (t.note ? ` (${t.note})` : '');
+      b.append(sw, nm);
+      b.addEventListener('click', () => {
+        theme = t.id;
+        try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* без запоминания */ }
+        applyTheme();
+        openThemes();
+      });
+      box.appendChild(b);
+    }
+    if ($('sheet-theme').hidden) openSheet('sheet-theme');
+  }
+  $('btn-theme').addEventListener('click', openThemes);
+  applyTheme();
+
+  // ---------- настройки игры (запоминаются на этом телефоне) ----------
+  const SET_KEY = 'checkers3-settings';
+  const settings = { hints: true, fast: false, anim: true };
+  try { Object.assign(settings, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { /* по умолчанию */ }
+  function applySettings() {
+    document.documentElement.classList.toggle('no-anim', !settings.anim);
+    $('set-rotate').checked = rotateOn;
+    $('set-hints').checked = settings.hints;
+    $('set-fast').checked = settings.fast;
+    $('set-anim').checked = settings.anim;
+  }
+  function saveSettings() {
+    try { localStorage.setItem(SET_KEY, JSON.stringify(settings)); } catch (e) { /* без запоминания */ }
+  }
+  $('set-rotate').addEventListener('change', (e) => { rotateOn = e.target.checked; save(); aimView(true); refresh(); });
+  $('set-hints').addEventListener('change', (e) => { settings.hints = e.target.checked; saveSettings(); drawMarks(); });
+  $('set-fast').addEventListener('change', (e) => { settings.fast = e.target.checked; saveSettings(); });
+  $('set-anim').addEventListener('change', (e) => { settings.anim = e.target.checked; saveSettings(); applySettings(); });
+  $('btn-theme').addEventListener('click', applySettings);
+
+  // ---------- главное меню ----------
+  function savedRoom() {
+    try { return localStorage.getItem(ROOM_KEY); } catch (e) { return null; }
+  }
+  function showMenu() {
+    clearTimeout(botTimer);
+    busy = false;
+    const code = mode === 'online' ? room.code : savedRoom();
+    let note = '';
+    if (code) note = `Комната ${code}`;
+    else if (game.log.length && !over()) note = `Партия: ход ${GEN[game.turn]}, ${game.log.length} ходов сыграно`;
+    $('m-continue').hidden = !note;
+    $('m-continue-note').textContent = note;
+    $('menu-coins').hidden = coins === null;
+    $('menu-coins').textContent = coins === null ? '' : coins.toLocaleString('ru-RU');
+    $('menu').hidden = false;
+    const first = $('menu').querySelector('.menu-btn:not([hidden])');
+    if (first) first.focus();
+  }
+  function hideMenu() {
+    $('menu').hidden = true;
+    refresh();
+    maybeBot();
+  }
+  $('btn-menu').addEventListener('click', showMenu);
+
+  // ---------- с телефона или с компьютера: спрашиваем при каждом входе ----------
+  const DEVICE_KEY = 'checkers3-device';
+  let device = 'phone';
+  const RU_DEVICE = { phone: 'телефон', pc: 'компьютер' };
+  function guessDevice() {
+    let last = null;
+    try { last = localStorage.getItem(DEVICE_KEY); } catch (e) { last = null; }
+    if (last === 'phone' || last === 'pc') return last;
+    return window.matchMedia('(pointer: coarse)').matches || window.innerWidth < 760 ? 'phone' : 'pc';
+  }
+  function setDevice(d) {
+    device = d;
+    document.documentElement.classList.toggle('pc', d === 'pc');
+    try { localStorage.setItem(DEVICE_KEY, d); } catch (e) { /* без запоминания */ }
+    $('m-device').textContent = `Играю с: ${RU_DEVICE[d]} — сменить`;
+  }
+  function showDevice() {
+    const g = guessDevice();
+    for (const b of document.querySelectorAll('[data-device]')) b.classList.toggle('guess', b.dataset.device === g);
+    $('device').hidden = false;
+    const pick = document.querySelector(`[data-device="${g}"]`);
+    if (pick) pick.focus();
+  }
+  for (const b of document.querySelectorAll('[data-device]')) {
+    b.addEventListener('click', () => { setDevice(b.dataset.device); $('device').hidden = true; showMenu(); });
+  }
+  $('m-device').addEventListener('click', () => { $('menu').hidden = true; showDevice(); });
+  $('m-continue').addEventListener('click', () => {
+    const code = mode === 'online' ? null : savedRoom();
+    if (code) ready.then(() => { if (db && myId) enterRoom(code); else { toast('Комната работает только по ссылке на claude.ai'); hideMenu(); } });
+    else hideMenu();
+  });
+  $('m-online').addEventListener('click', openOnline);
+
+  // ---------- экран «Создать игру» ----------
+  const CREATE_KEY = 'checkers3-create';
+  const draft = { mode: 'bots', players: '3', size: 'small', fast: '0', mustCapture: '1', flyingKing: '1', backCapture: '1', stake: '500', color: '0' };
+  try { Object.assign(draft, JSON.parse(localStorage.getItem(CREATE_KEY) || '{}')); } catch (e) { /* по умолчанию */ }
+  const SIZE_NOTE = { small: 'Половины 8×4 — по 12 шашек у каждого', big: 'Половины 10×5 — по 20 шашек, партия длиннее' };
+  function renderCreate() {
+    for (const group of document.querySelectorAll('#create [data-opt]')) {
+      for (const b of group.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.val === draft[group.dataset.opt]));
+    }
+    const online = draft.mode === 'online';
+    $('create-online').hidden = !online;
+    // Вдвоём — чёрных нет; ставка не больше того, что есть
+    const black = document.querySelector('#create [data-opt="color"] [data-val="2"]');
+    black.disabled = draft.players === '2';
+    if (black.disabled && draft.color === '2') { draft.color = '0'; renderCreate(); return; }
+    for (const b of document.querySelectorAll('#create [data-opt="stake"] button')) b.disabled = coins !== null && +b.dataset.val > coins;
+    $('size-note').textContent = SIZE_NOTE[draft.size];
+    $('create-coins').hidden = coins === null;
+    $('create-coins').textContent = coins === null ? '' : coins.toLocaleString('ru-RU');
+    $('create-go').textContent = online ? 'Создать комнату ▶' : 'Начать ▶';
+  }
+  for (const group of document.querySelectorAll('#create [data-opt]')) {
+    group.addEventListener('click', (e) => {
+      const b = e.target.closest('button');
+      if (!b || b.disabled) return;
+      draft[group.dataset.opt] = b.dataset.val;
+      try { localStorage.setItem(CREATE_KEY, JSON.stringify(draft)); } catch (err) { /* без запоминания */ }
+      renderCreate();
+    });
+  }
+  function openCreate() {
+    $('create-err').hidden = true;
+    renderCreate();
+    $('menu').hidden = true;
+    $('create').hidden = false;
+    $('create-go').focus();
+  }
+  function draftCfg() {
+    return Object.assign({}, window.Checkers3.SIZES[draft.size], {
+      players: +draft.players, mustCapture: draft.mustCapture === '1', flyingKing: draft.flyingKing === '1', backCapture: draft.backCapture === '1',
+    });
+  }
+  $('m-create').addEventListener('click', openCreate);
+  $('create-back').addEventListener('click', () => { $('create').hidden = true; showMenu(); });
+  $('create-go').addEventListener('click', async () => {
+    settings.fast = draft.fast === '1';
+    saveSettings();
+    applySettings();
+    const cfg = draftCfg();
+    if (draft.mode === 'online') {
+      await ready;
+      if (!db || !myId) {
+        $('create-err').textContent = 'Игра по сети работает, когда игра открыта по ссылке на claude.ai и вы вошли в аккаунт.';
+        $('create-err').hidden = false;
+        return;
+      }
+      stakePick = +draft.stake;
+      $('create').hidden = true;
+      createRoom(+draft.color, cfg);
+      return;
+    }
+    if (mode === 'online') leaveRoom();
+    $('create').hidden = true;
+    $('menu').hidden = true;
+    startNew(draft.mode === 'bots' ? ['human', 'bot', 'bot'] : ['human', 'human', 'human'], cfg);
+  });
+
+  const ROOM_KEY = 'checkers3-room';
+  const CODE_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let mode = 'local';
+  let room = null;
+  let myId = null;
+  let db = null;
+  let userApi = null;
+  let unsub = null;
+  let localRev = 0;
+  let pushing = false;
+  let pushChain = Promise.resolve();
+  let loadTimer = 0;
+  const names = {};
+  const avatars = {};
+  const wallets = {};
+  const walletsAt = {};
+  // Монеты: у каждого аккаунта свой кошелёк wallets/<id>, при первом входе — 5000, купить нельзя
+  let coins = null;
+  let walletChain = Promise.resolve();
+  let stakePick = 500;
+  let settling = false;
+  // Реакции: смайлики летят всем, кто сейчас в комнате (ничего не сохраняется)
+  let chan = null;
+  const REACTS = ['👍', '😂', '😮', '😡', '🔥', '👏', '😭', '🤝', '🤔', '😎'];
+  const ready = (async () => {
+    if (!window.claude || !window.claude.use) return;
+    [db, userApi] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+    myId = userApi ? await userApi.id() : null;
+    if (db && myId) startWallet();
+  })();
+
+  function startWallet() {
+    const ref = db.doc('wallets/' + myId);
+    ref.get().then((s) => (s.exists ? null : ref.set({ coins: 5000, since: Date.now() }))).catch(() => {});
+    ref.onSnapshot((s) => {
+      if (s.exists) { coins = Math.max(0, Math.round(Number(s.data().coins) || 0)); renderCoins(); }
+    }, () => {});
+  }
+  // Изменить свои монеты (по одной записи за раз)
+  function changeCoins(delta) {
+    const p = walletChain.then(async () => {
+      const ref = db.doc('wallets/' + myId);
+      const s = await ref.get();
+      const now = s.exists ? Math.round(Number(s.data().coins) || 0) : 5000;
+      if (now + delta < 0) throw new Error('мало монет');
+      await ref.set({ coins: now + delta, since: (s.exists && s.data().since) || Date.now() });
+      coins = now + delta;
+      renderCoins();
+    });
+    walletChain = p.catch(() => {});
+    return p;
+  }
+  function renderCoins() {
+    $('coins').hidden = coins === null;
+    $('coins').textContent = coins === null ? '' : coins.toLocaleString('ru-RU');
+    $('coins-line').hidden = coins === null;
+    $('coins-line').textContent = coins === null ? '' : `У вас ${coins.toLocaleString('ru-RU')} монет. Купить монеты нельзя — их выигрывают.`;
+    for (const b of document.querySelectorAll('[data-stake]')) {
+      const v = +b.dataset.stake;
+      b.setAttribute('aria-pressed', String(v === stakePick));
+      b.disabled = coins !== null && v > coins;
+    }
+  }
+  for (const b of document.querySelectorAll('[data-stake]')) {
+    b.addEventListener('click', () => { stakePick = +b.dataset.stake; renderCoins(); });
+  }
+
+  const potOf = () => Object.keys(room.stakes || {}).filter((k) => k.startsWith(room.round + '_'))
+    .reduce((s, k) => s + (Number(room.stakes[k]) || 0), 0);
+  // Ставки: севший за стол кладёт ставку в банк; в конце победитель забирает банк,
+  // а если выиграл компьютер или ничья — каждый забирает свою ставку назад
+  async function settleBets() {
+    if (!room || !room.stake || settling || coins === null || !myId) return;
+    const key = room.round + '_' + myId;
+    settling = true;
+    try {
+      if (room.seats.includes(myId) && !over() && !(key in room.stakes)) {
+        const amt = coins >= room.stake ? room.stake : 0;
+        if (amt) await changeCoins(-amt);
+        await roomRef(room.code).update({ stakes: { [key]: amt } });
+        toast(amt ? `Ставка ${amt} монет — в банке` : 'Не хватает монет на ставку — играете без неё');
+      } else if (over()) {
+        const w = game.winner;
+        const winnerId = w >= 0 && !room.bots[w] ? room.seats[w] : null;
+        const pot = potOf();
+        if (winnerId === myId && !room.settled[room.round] && pot > 0) {
+          await roomRef(room.code).update({ settled: { [room.round]: myId } });
+          await changeCoins(pot);
+          toast(`Вы забрали банк: ${pot} монет!`);
+        } else if (!winnerId && Number(room.stakes[key]) > 0 && !room.refunds[key]) {
+          await roomRef(room.code).update({ refunds: { [key]: true } });
+          await changeCoins(Number(room.stakes[key]));
+          toast(`Ставка вернулась: ${room.stakes[key]} монет`);
+        }
+      }
+    } catch (e) {
+      /* не вышло — попробуем при следующем обновлении комнаты */
+    } finally {
+      settling = false;
+    }
+  }
+
+  async function joinReactions(code) {
+    try {
+      const r = await window.claude.use('room');
+      if (!r || mode !== 'online') return;
+      chan = await r.join('checkers3-' + code.toLowerCase());
+      chan.on('react', (msg) => {
+        const e = msg.data && msg.data.e;
+        if (REACTS.includes(e)) showReaction(msg.by, e);
+      });
+    } catch (e) {
+      chan = null;
+    }
+    renderReacts();
+  }
+  function renderReacts() {
+    const box = $('reacts');
+    box.hidden = !(mode === 'online' && chan);
+    if (box.hidden || box.childElementCount) return;
+    for (const e of REACTS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = e;
+      b.setAttribute('aria-label', 'Реакция ' + e);
+      b.addEventListener('click', () => {
+        if (chan) chan.emit('react', { e }).catch(() => toast('Реакция не отправилась'));
+      });
+      box.appendChild(b);
+    }
+  }
+  // Смайлик всплывает над табличкой того, кто его отправил
+  function showReaction(by, e) {
+    const seat = room ? room.seats.indexOf(by) : -1;
+    const anchor = document.querySelector(`.tile[data-seat="${seat}"] .face`) || $('status');
+    const r = anchor.getBoundingClientRect();
+    const s = document.createElement('span');
+    s.className = 'bubble';
+    s.textContent = e;
+    s.style.left = Math.max(8, r.left + r.width / 2 - 28) + 'px';
+    s.style.top = Math.max(8, r.top + r.height / 2 - 34) + 'px';
+    document.body.appendChild(s);
+    setTimeout(() => s.remove(), 2500);
+  }
+  const cleanCode = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+  const roomRef = (code) => db.doc('games/' + code);
+  const plain = (x) => JSON.parse(JSON.stringify(x));
+
+  function onlineError(text) {
+    const e = $('online-err');
+    e.textContent = text;
+    e.hidden = !text;
+  }
+  async function openOnline() {
+    onlineError('');
+    openSheet('sheet-online');
+    $('online-body').hidden = true;
+    $('online-why').textContent = 'Подключаемся…';
+    await ready;
+    if (!db || !myId) {
+      $('online-why').textContent = 'Игра по сети работает, когда игра открыта по ссылке на claude.ai и вы вошли в свой аккаунт. Файл на телефоне и предпросмотр играют только на одном устройстве.';
+      return;
+    }
+    const can = await userApi.can('data.write');
+    $('online-why').textContent = can === false
+      ? 'Вам пока можно только смотреть: попросите хозяина игры дать вам доступ «Редактор» в меню «Поделиться».'
+      : 'Каждый играет со своего телефона: один создаёт комнату, остальные входят по её коду.';
+    $('online-body').hidden = can === false;
+    renderCoins();
+  }
+
+  async function createRoom(color, cfg) {
+    onlineError('');
+    // Ошибку показываем и в окне «По сети», и всплывающей строкой (если комнату создавали с экрана «Создать игру»)
+    const fail = (text) => { onlineError(text); toast(text); };
+    if (stakePick > 0 && coins !== null && coins < stakePick) {
+      fail(`Не хватает монет на ставку ${stakePick}: у вас ${coins}`);
+      return;
+    }
+    const rules = window.Checkers3.make(cfg || {});
+    let code = '';
+    try {
+      for (let k = 0; k < 6 && !code; k++) {
+        let c = '';
+        for (let i = 0; i < 4; i++) c += CODE_ABC[Math.floor(Math.random() * CODE_ABC.length)];
+        if (!(await roomRef(c).get()).exists) code = c;
+      }
+      if (!code) throw new Error('busy');
+      const seatsNow = [null, null, null];
+      seatsNow[color] = myId;
+      await roomRef(code).set({ game: plain(rules.newGame()), seats: seatsNow, bots: [false, false, false], host: myId, rev: 1, created: Date.now(),
+        stake: stakePick, round: 1, stakes: {}, settled: {}, refunds: {} });
+      enterRoom(code);
+    } catch (e) {
+      fail(e && e.code === 'invalid_argument'
+        ? 'Не получилось создать комнату: у вас нет права менять игру. Попросите доступ «Редактор».'
+        : 'Не получилось создать комнату. Проверьте интернет и попробуйте ещё раз.');
+    }
+  }
+
+  async function joinRoom(raw) {
+    const code = cleanCode(raw);
+    onlineError('');
+    if (code.length !== 4) { onlineError('Код — 4 знака, например K7QM'); return; }
+    try {
+      const snap = await roomRef(code).get();
+      if (!snap.exists) { onlineError(`Комнаты ${code} нет — проверьте код`); return; }
+      enterRoom(code);
+    } catch (e) {
+      onlineError('Не получилось открыть комнату. Проверьте интернет.');
+    }
+  }
+
+  function enterRoom(code) {
+    if (unsub) unsub();
+    if (chan) chan.leave().catch(() => {});
+    chan = null;
+    clearTimeout(botTimer);
+    busy = false;
+    try { localStorage.setItem(ROOM_KEY, code); } catch (e) { /* без запоминания */ }
+    mode = 'online';
+    $('menu').hidden = true;
+    room = { code, seats: [null, null, null], bots: [false, false, false], host: null, rev: 0 };
+    localRev = -1;
+    history = [];
+    selected = -1;
+    closeSheets();
+    $('room-note').textContent = 'Загружаем комнату…';
+    renderRoom();
+    clearTimeout(loadTimer);
+    loadTimer = setTimeout(() => { $('room-note').textContent = 'Не удаётся связаться с комнатой — проверьте интернет'; }, 10000);
+    unsub = roomRef(code).onSnapshot((snap) => {
+      if (snap.metadata && !snap.metadata.fromCache) clearTimeout(loadTimer);
+      if (!snap.exists) { if (!snap.metadata.fromCache) { toast('Комнаты больше нет'); leaveRoom(); } return; }
+      const d = snap.data();
+      room = {
+        code, seats: d.seats.slice(), bots: d.bots.slice(), host: d.host, rev: d.rev,
+        stake: Number(d.stake) || 0, round: Number(d.round) || 1, stakes: d.stakes || {}, settled: d.settled || {}, refunds: d.refunds || {},
+      };
+      if (d.rev !== localRev && !pushing) applyRemote(plain(d.game), d.rev);
+      resolveNames();
+      refresh();
+      aimView(true);
+      maybeBot();
+      settleBets();
+    }, () => {
+      $('room-note').textContent = 'Связь с комнатой потеряна — выйдите и войдите снова';
+    });
+    joinReactions(code);
+  }
+
+  // Пришла позиция с другого телефона: если это один новый ход — показываем его движением
+  function applyRemote(g, rev) {
+    if (g.cfg && JSON.stringify(g.cfg) !== JSON.stringify(Ch.cfg)) {
+      Ch = window.Checkers3.make(g.cfg);
+      buildBoard();
+      placeAll();
+      game = Ch.newGame();
+    }
+    const prev = game;
+    localRev = rev;
+    game = g;
+    selected = -1;
+    document.documentElement.style.setProperty('--dur', '0.3s');
+    if (g.log.length === prev.log.length + 1 && g.last) {
+      hop(g.last.from, g.last.path || [g.last.to]);
+    }
+    sync();
+    if (g.log.length >= prev.log.length && g.out.length >= prev.out.length) announce(prev);
+    if (over()) setTimeout(showOver, 700);
+  }
+
+  // Отправить позицию в комнату (по одной записи за раз)
+  function pushGame(extra) {
+    const body = plain(game);
+    room.rev += 1;
+    localRev = room.rev;
+    const rev = room.rev;
+    pushing = true;
+    pushChain = pushChain.then(() => roomRef(room.code).update(Object.assign({ game: body, rev }, extra || {}))).catch(() => {
+      toast('Ход не дошёл до комнаты — проверьте интернет');
+    }).then(() => { pushing = false; });
+  }
+
+  async function takeSeat(c) {
+    const s = room.seats.map((x) => (x === myId ? null : x));
+    if (s[c] && s[c] !== myId) { toast('Это место уже занято'); return; }
+    s[c] = myId;
+    const b = room.bots.slice();
+    b[c] = false;
+    try { await roomRef(room.code).update({ seats: s, bots: b }); } catch (e) { toast('Не получилось занять место'); }
+  }
+  async function setBot(c, on) {
+    const b = room.bots.slice();
+    b[c] = on;
+    try { await roomRef(room.code).update({ bots: b }); } catch (e) { toast('Не получилось'); }
+  }
+
+  async function resolveNames() {
+    if (!userApi) return;
+    const ids = room.seats.filter(Boolean);
+    if (!ids.length) return;
+    const ps = await userApi.profiles(ids);
+    let changed = false;
+    for (const id of ids) {
+      const n = (ps[id] && ps[id].name) || '';
+      if (n && names[id] !== n) { names[id] = n; changed = true; }
+      const a = (ps[id] && ps[id].avatarUrl) || '';
+      if (a && avatars[id] !== a) { avatars[id] = a; changed = true; }
+    }
+    // Монеты соперников — раз в полминуты, чтобы не дёргать хранилище
+    const now = Date.now();
+    for (const id of ids) {
+      if (id === myId || now - (walletsAt[id] || 0) < 30000) continue;
+      walletsAt[id] = now;
+      db.doc('wallets/' + id).get().then((s) => {
+        if (s.exists && wallets[id] !== s.data().coins) { wallets[id] = s.data().coins; renderPlayers(); }
+      }).catch(() => {});
+    }
+    if (changed) { renderPlayers(); renderStatus(); }
+  }
+
+  function renderRoom() {
+    $('roombar').hidden = mode !== 'online';
+    if (mode !== 'online') return;
+    $('room-code').textContent = room.code;
+    const me = room.seats.indexOf(myId);
+    if (room.rev) $('room-note').textContent = me >= 0 ? `Вы играете за ${GEN[me]}` : 'Вы смотрите — займите свободное место';
+    $('room-pot').hidden = !room.stake;
+    if (room.stake) $('room-pot').textContent = `Ставка ${room.stake} · банк ${potOf()}`;
+  }
+
+  function leaveRoom() {
+    if (unsub) unsub();
+    unsub = null;
+    if (chan) chan.leave().catch(() => {});
+    chan = null;
+    renderReacts();
+    clearTimeout(botTimer);
+    clearTimeout(loadTimer);
+    try { localStorage.removeItem(ROOM_KEY); } catch (e) { /* ничего */ }
+    mode = 'local';
+    room = null;
+    busy = false;
+    selected = -1;
+    let ok = false;
+    try { ok = load(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) { ok = false; }
+    if (!ok) { game = Ch.newGame(); history = []; }
+    document.documentElement.style.setProperty('--dur', '0s');
+    sync();
+    aimView(false);
+    refresh();
+    maybeBot();
+  }
+
+  $('btn-online').addEventListener('click', openOnline);
+  for (const b of document.querySelectorAll('[data-create]')) b.addEventListener('click', () => createRoom(+b.dataset.create));
+  $('join-form').addEventListener('submit', (e) => { e.preventDefault(); joinRoom($('join-code').value); });
+  $('join-code').addEventListener('input', (e) => { e.target.value = cleanCode(e.target.value); });
+  $('btn-leave').addEventListener('click', leaveRoom);
+  $('btn-copy').addEventListener('click', () => {
+    const code = room ? room.code : '';
+    try {
+      navigator.clipboard.writeText(code).then(() => toast('Код скопирован: ' + code), () => toast('Код комнаты: ' + code));
+    } catch (e) { toast('Код комнаты: ' + code); }
+  });
+
+  // ---------- запуск ----------
+  function start(saved) {
+    let ok = false;
+    if (saved && saved.game) ok = load(saved);
+    if (!ok) {
+      try { ok = load(JSON.parse(localStorage.getItem(KEY) || 'null')); } catch (e) { ok = false; }
+    }
+    buildBoard();
+    view = rotateOn && seats[game.turn] === 'human' ? game.turn : (seats.indexOf('human') >= 0 ? seats.indexOf('human') : 0);
+    rotDeg = 120 * view;
+    document.documentElement.style.setProperty('--dur', '0s');
+    sync();
+    placeAll();
+    applySettings();
+    refresh();
+    // При входе — сначала «с телефона или с компьютера», потом главное меню
+    setDevice(guessDevice());
+    showMenu();
+    $('menu').hidden = true;
+    showDevice();
+    ready.then(() => { if (!$('menu').hidden) showMenu(); }); // когда станут известны монеты
+  }
+  if (window.claude && window.claude.hot && window.claude.hot.snapshot) {
+    window.claude.hot.snapshot(() => ({ game, history: history.slice(-240), seats, rotateOn }));
+  }
+  if (window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start);
+  else start(window.claude && window.claude.hot ? window.claude.hot.data : null);
+})();
+</script>
+
+<script>if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));</script>
+</body>
+</html>
